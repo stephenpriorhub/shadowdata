@@ -1,12 +1,15 @@
 /**
- * Patent filings (USPTO via PatentsView Search API). Thesis: grant cadence and
- * subject matter reveal R&D direction and moat-building — a structural, long-term
- * signal. An acceleration can foreshadow a new product line.
+ * Patent filings (USPTO Open Data Portal — PatentsView data). Thesis: grant cadence
+ * and subject matter reveal R&D direction and moat-building — a structural, long-term
+ * signal; an acceleration can foreshadow a new product line.
  *
- * PatentsView now requires a free API key (X-Api-Key). Without PATENTSVIEW_API_KEY
- * the connector degrades gracefully to "no-data" with a note on how to unlock it.
+ * NOTE (2026): PatentsView was decommissioned at search.patentsview.org and migrated
+ * into the USPTO Open Data Portal (ODP). The machine endpoint is now
+ * https://api.uspto.gov/api/v1/patentsview/patents and requires an ODP API key
+ * (X-API-KEY). Set USPTO_API_KEY (or legacy PATENTSVIEW_API_KEY). Without a key —
+ * or if ODP rejects the request — the connector degrades gracefully to "no-data".
  */
-import { postJson } from "./http";
+import { postJson, classifyFailure } from "./http";
 import { result, type Connector, type Evidence, type Metric, type Timeseries } from "./types";
 
 const meta = {
@@ -15,6 +18,8 @@ const meta = {
   category: "patents",
   tier: "free",
 } as const;
+
+const ODP_PATENTS_URL = "https://api.uspto.gov/api/v1/patentsview/patents";
 
 interface PatentHit {
   patent_id: string;
@@ -25,7 +30,7 @@ interface PatentHit {
 export const patentsConnector: Connector = {
   ...meta,
   enabled: true,
-  description: "Recent granted-patent volume and topics by assignee (USPTO / PatentsView).",
+  description: "Recent granted-patent volume and topics by assignee (USPTO Open Data Portal / PatentsView).",
   requiredIdentifiers: ["patentAssignees"],
   async fetch(entity, ctx) {
     const start = Date.now();
@@ -33,11 +38,11 @@ export const patentsConnector: Connector = {
     if (assignees.length === 0) {
       return result(meta, { status: "not-applicable", note: "No patent assignee names mapped." });
     }
-    const key = process.env.PATENTSVIEW_API_KEY;
+    const key = process.env.USPTO_API_KEY || process.env.PATENTSVIEW_API_KEY;
     if (!key) {
       return result(meta, {
         status: "no-data",
-        note: "Set PATENTSVIEW_API_KEY (free at patentsview.org/apis) to enable patent data.",
+        note: "Set USPTO_API_KEY (free ODP account at data.uspto.gov) to enable patent data.",
         tookMs: Date.now() - start,
       });
     }
@@ -58,12 +63,13 @@ export const patentsConnector: Connector = {
         o: { size: 100 },
         s: [{ patent_date: "desc" }],
       };
-      const data = await postJson<{ patents: PatentHit[] | null; total_hits: number }>(
-        "https://search.patentsview.org/api/v1/patent/",
+      const data = await postJson<{ patents: PatentHit[] | null; total_hits?: number; count?: number }>(
+        ODP_PATENTS_URL,
         body,
-        { signal: ctx.signal, headers: { "X-Api-Key": key } }
+        { signal: ctx.signal, headers: { "X-API-KEY": key }, timeoutMs: 15_000 }
       );
       const patents = data.patents ?? [];
+      const total = data.total_hits ?? data.count ?? patents.length;
       if (patents.length === 0) {
         return result(meta, {
           status: "no-data",
@@ -78,7 +84,7 @@ export const patentsConnector: Connector = {
         byYear.set(y, (byYear.get(y) ?? 0) + 1);
       }
       const ts: Timeseries = {
-        name: "Patents granted / year",
+        name: "Patents granted / year (sampled)",
         points: [...byYear.entries()].sort().map(([y, v]) => ({ t: `${y}-01-01`, v })),
       };
       const years = [...byYear.keys()].sort();
@@ -88,7 +94,7 @@ export const patentsConnector: Connector = {
       const prevCount = prev ? byYear.get(prev) ?? 0 : undefined;
 
       const metrics: Metric[] = [
-        { name: "Granted (5yr, sampled)", value: data.total_hits ?? patents.length },
+        { name: "Granted (5yr)", value: total },
         {
           name: `Granted (${latest})`,
           value: latestCount,
@@ -106,16 +112,20 @@ export const patentsConnector: Connector = {
 
       return result(meta, {
         status: "ok",
-        headline: `${data.total_hits ?? patents.length} patents granted since ${sinceYear}; ${latestCount} in ${latest}.`,
+        headline: `${total} patents granted since ${sinceYear}; ${latestCount} in ${latest}.`,
         metrics,
         timeseries: [ts],
         evidence,
         tookMs: Date.now() - start,
       });
     } catch (e) {
+      const f = classifyFailure(e);
       return result(meta, {
-        status: "error",
-        error: e instanceof Error ? e.message : String(e),
+        ...f,
+        note:
+          f.status === "no-data"
+            ? f.note
+            : "USPTO ODP request failed (the portal now requires an account-linked API key).",
         tookMs: Date.now() - start,
       });
     }

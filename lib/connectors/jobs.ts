@@ -4,7 +4,7 @@
  * is investing. Aggressive engineering/sales hiring = expansion (long-term bull);
  * a sudden collapse in postings = a hiring freeze / cost-cutting (short-term flag).
  */
-import { getJson } from "./http";
+import { getJson, HttpError } from "./http";
 import { result, type Connector, type Evidence, type Metric } from "./types";
 
 const meta = {
@@ -63,27 +63,36 @@ export const jobsConnector: Connector = {
       });
     }
     const roles: Role[] = [];
-    const errors: string[] = [];
+    const errors: string[] = []; // only genuine (non-404) failures
+    let notFound = false; // a mapped slug that simply doesn't exist
+    const handle = (source: string, e: unknown) => {
+      if (e instanceof HttpError && (e.status === 404 || e.status === 403)) notFound = true;
+      else errors.push(`${source}: ${e instanceof Error ? e.message : e}`);
+    };
     if (greenhouseSlug) {
       try {
         roles.push(...(await greenhouse(greenhouseSlug, ctx.signal)));
       } catch (e) {
-        errors.push(`greenhouse: ${e instanceof Error ? e.message : e}`);
+        handle("greenhouse", e);
       }
     }
     if (leverSlug) {
       try {
         roles.push(...(await lever(leverSlug, ctx.signal)));
       } catch (e) {
-        errors.push(`lever: ${e instanceof Error ? e.message : e}`);
+        handle("lever", e);
       }
     }
 
     if (roles.length === 0) {
+      if (errors.length) {
+        return result(meta, { status: "error", error: errors.join("; "), tookMs: Date.now() - start });
+      }
       return result(meta, {
-        status: errors.length ? "error" : "no-data",
-        error: errors.join("; ") || undefined,
-        note: errors.length ? undefined : "Job board resolved but currently lists no open roles.",
+        status: "no-data",
+        note: notFound
+          ? "No public Greenhouse/Lever board found at the mapped slug (the company may use a different ATS)."
+          : "Job board resolved but currently lists no open roles.",
         tookMs: Date.now() - start,
       });
     }

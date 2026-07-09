@@ -13,7 +13,7 @@ export async function GET() {
       anthropic: !!process.env.ANTHROPIC_API_KEY,
       polygon: !!process.env.POLYGON_API_KEY,
       github: !!process.env.GITHUB_TOKEN,
-      patentsview: !!process.env.PATENTSVIEW_API_KEY,
+      uspto: !!(process.env.USPTO_API_KEY || process.env.PATENTSVIEW_API_KEY),
     },
     connectors: CONNECTORS.map((c) => ({
       id: c.id,

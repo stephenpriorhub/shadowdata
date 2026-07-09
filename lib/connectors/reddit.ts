@@ -7,7 +7,7 @@
  * Reddit rate-limits unauthenticated server IPs; failures degrade to "error"/"no-data"
  * and never break the response.
  */
-import { getJson } from "./http";
+import { getJson, classifyFailure } from "./http";
 import { result, type Connector, type Evidence, type Metric } from "./types";
 
 const meta = {
@@ -89,10 +89,10 @@ export const redditConnector: Connector = {
         tookMs: Date.now() - start,
       });
     } catch (e) {
+      const f = classifyFailure(e);
       return result(meta, {
-        status: "error",
-        error: e instanceof Error ? e.message : String(e),
-        note: "Reddit rate-limits server requests; retry later.",
+        ...f,
+        error: f.status === "error" ? "Reddit rate-limits server requests; retry later." : undefined,
         tookMs: Date.now() - start,
       });
     }

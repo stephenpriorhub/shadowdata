@@ -5,7 +5,7 @@
  * a short-term catalyst. (Google Trends / SimilarWeb are richer paid upgrades —
  * see the disabled premium connectors.)
  */
-import { getJson } from "./http";
+import { getJson, classifyFailure } from "./http";
 import { result, type Connector, type Metric, type Timeseries } from "./types";
 
 const meta = {
@@ -94,9 +94,10 @@ export const webConnector: Connector = {
         tookMs: Date.now() - start,
       });
     } catch (e) {
+      const f = classifyFailure(e);
       return result(meta, {
-        status: "error",
-        error: e instanceof Error ? e.message : String(e),
+        ...f,
+        note: f.status === "no-data" ? `No Wikipedia article found for "${title}".` : f.note,
         tookMs: Date.now() - start,
       });
     }

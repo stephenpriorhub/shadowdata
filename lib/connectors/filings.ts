@@ -3,7 +3,7 @@
  * flag (material events — M&A, guidance, leadership change); steady S-1/10-Q/10-K
  * cadence is baseline. Free, authoritative, no key — just a required User-Agent.
  */
-import { getJson } from "./http";
+import { getJson, classifyFailure } from "./http";
 import { result, type Connector, type Evidence, type Metric } from "./types";
 
 const meta = {
@@ -94,11 +94,7 @@ export const filingsConnector: Connector = {
         tookMs: Date.now() - start,
       });
     } catch (e) {
-      return result(meta, {
-        status: "error",
-        error: e instanceof Error ? e.message : String(e),
-        tookMs: Date.now() - start,
-      });
+      return result(meta, { ...classifyFailure(e), tookMs: Date.now() - start });
     }
   },
 };

@@ -82,3 +82,27 @@ export function trendOf(changePct: number | undefined): "up" | "down" | "flat" |
   if (changePct < -5) return "down";
   return "flat";
 }
+
+/**
+ * Turn a thrown fetch failure into a clean SignalResult fragment. An expected miss
+ * — a 404 from a mapped-but-wrong identifier, a dead host — is "no-data" with a
+ * friendly note, NOT a scary "error: 404 Not Found" card. Only genuinely
+ * unexpected failures surface as "error".
+ */
+export function classifyFailure(e: unknown): {
+  status: "no-data" | "error";
+  note?: string;
+  error?: string;
+} {
+  if (e instanceof HttpError) {
+    if (e.status === 404) return { status: "no-data", note: "Source has no record for the mapped identifier." };
+    if (e.status === 403) return { status: "no-data", note: "Source access denied for the mapped identifier." };
+    if (e.status === 429) return { status: "error", error: "Rate limited by the source — try again shortly." };
+    return { status: "error", error: `Source returned ${e.status}.` };
+  }
+  const msg = e instanceof Error ? e.message : String(e);
+  if (/abort|timed?\s?out/i.test(msg)) return { status: "error", error: "Source timed out." };
+  if (/ENOTFOUND|EAI_AGAIN|fetch failed|ECONN|ENETUNREACH/i.test(msg))
+    return { status: "no-data", note: "Source is currently unreachable." };
+  return { status: "error", error: msg };
+}

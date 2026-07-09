@@ -3,7 +3,7 @@
  * points are a proxy for technical/early-adopter attention; a spike often precedes
  * broader awareness. Short-term buzz signal, and a long-term mindshare gauge.
  */
-import { getJson } from "./http";
+import { getJson, classifyFailure } from "./http";
 import { result, type Connector, type Evidence, type Metric, type Timeseries } from "./types";
 
 const meta = {
@@ -99,11 +99,7 @@ export const hackernewsConnector: Connector = {
         tookMs: Date.now() - start,
       });
     } catch (e) {
-      return result(meta, {
-        status: "error",
-        error: e instanceof Error ? e.message : String(e),
-        tookMs: Date.now() - start,
-      });
+      return result(meta, { ...classifyFailure(e), tookMs: Date.now() - start });
     }
   },
 };

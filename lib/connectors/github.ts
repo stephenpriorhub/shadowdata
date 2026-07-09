@@ -7,7 +7,7 @@
  * Uses the REST API. Works unauthenticated (60 req/hr); GITHUB_TOKEN raises it to
  * 5000/hr and is used when present.
  */
-import { getJson, HttpError, pctChange, trendOf } from "./http";
+import { getJson, HttpError, pctChange, trendOf, classifyFailure } from "./http";
 import { result, type Connector, type Evidence, type Metric, type Timeseries } from "./types";
 
 const meta = {
@@ -152,9 +152,10 @@ export const githubConnector: Connector = {
         tookMs: Date.now() - start,
       });
     } catch (e) {
+      const f = classifyFailure(e);
       return result(meta, {
-        status: "error",
-        error: e instanceof Error ? e.message : String(e),
+        ...f,
+        note: f.status === "no-data" ? `GitHub org "${org}" not found or has no public repos.` : f.note,
         tookMs: Date.now() - start,
       });
     }

@@ -6,7 +6,7 @@
  *
  * iOS only in v1 (Google Play has no free official API — see the disabled stub).
  */
-import { getJson } from "./http";
+import { getJson, classifyFailure } from "./http";
 import { result, type Connector, type Evidence, type Metric } from "./types";
 
 const meta = {
@@ -97,11 +97,7 @@ export const appsConnector: Connector = {
         tookMs: Date.now() - start,
       });
     } catch (e) {
-      return result(meta, {
-        status: "error",
-        error: e instanceof Error ? e.message : String(e),
-        tookMs: Date.now() - start,
-      });
+      return result(meta, { ...classifyFailure(e), tookMs: Date.now() - start });
     }
   },
 };
