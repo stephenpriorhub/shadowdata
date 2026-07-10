@@ -339,8 +339,13 @@ function ThesisCardView({ card }: { card: ThesisCard }) {
 function ThesisPanel({ synthesis, loading }: { synthesis: Synthesis | null; loading: boolean }) {
   if (loading) return <div className="rounded-xl border border-border bg-surface p-5 text-sm text-muted">Synthesizing an investment thesis from the signals…</div>;
   if (!synthesis) return null;
-  const shortTerm = synthesis.cards.filter((c) => c.horizon === "short-term");
-  const longTerm = synthesis.cards.filter((c) => c.horizon === "long-term");
+  const arr = <T,>(v: T[] | undefined): T[] => (Array.isArray(v) ? v : []);
+  const cards = arr(synthesis.cards);
+  const bullCase = arr(synthesis.bullCase);
+  const bearCase = arr(synthesis.bearCase);
+  const dataGaps = arr(synthesis.dataGaps);
+  const shortTerm = cards.filter((c) => c.horizon === "short-term");
+  const longTerm = cards.filter((c) => c.horizon === "long-term");
   return (
     <div className="rounded-xl border border-border bg-surface p-5">
       <h2 className="text-lg font-semibold">Investment Thesis</h2>
@@ -365,13 +370,13 @@ function ThesisPanel({ synthesis, loading }: { synthesis: Synthesis | null; load
           <div className="space-y-2">{longTerm.length ? longTerm.map((c, i) => <ThesisCardView key={i} card={c} />) : <p className="text-xs text-muted">None identified.</p>}</div>
         </div>
       </div>
-      {(synthesis.bullCase.length > 0 || synthesis.bearCase.length > 0) && (
+      {(bullCase.length > 0 || bearCase.length > 0) && (
         <div className="mt-5 grid gap-5 sm:grid-cols-2">
-          <div><h3 className="mb-2 text-sm font-semibold text-bull">Bull case</h3><ul className="list-disc space-y-1 pl-4 text-xs text-foreground/85">{synthesis.bullCase.map((b, i) => <li key={i}>{b}</li>)}</ul></div>
-          <div><h3 className="mb-2 text-sm font-semibold text-bear">Bear case</h3><ul className="list-disc space-y-1 pl-4 text-xs text-foreground/85">{synthesis.bearCase.map((b, i) => <li key={i}>{b}</li>)}</ul></div>
+          <div><h3 className="mb-2 text-sm font-semibold text-bull">Bull case</h3><ul className="list-disc space-y-1 pl-4 text-xs text-foreground/85">{bullCase.map((b, i) => <li key={i}>{b}</li>)}</ul></div>
+          <div><h3 className="mb-2 text-sm font-semibold text-bear">Bear case</h3><ul className="list-disc space-y-1 pl-4 text-xs text-foreground/85">{bearCase.map((b, i) => <li key={i}>{b}</li>)}</ul></div>
         </div>
       )}
-      {synthesis.dataGaps.length > 0 && <p className="mt-4 text-xs text-muted"><span className="font-medium">Data gaps:</span> {synthesis.dataGaps.join(", ")}.</p>}
+      {dataGaps.length > 0 && <p className="mt-4 text-xs text-muted"><span className="font-medium">Data gaps:</span> {dataGaps.join(", ")}.</p>}
       <p className="mt-4 border-t border-border pt-3 text-[11px] leading-relaxed text-muted">{synthesis.disclaimer}</p>
     </div>
   );

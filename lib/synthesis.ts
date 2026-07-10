@@ -136,15 +136,38 @@ export async function synthesize(
   });
 
   const toolUse = msg.content.find((b) => b.type === "tool_use");
-  const out = (toolUse && "input" in toolUse ? toolUse.input : {}) as Partial<Synthesis>;
+  const out = (toolUse && "input" in toolUse ? (toolUse.input as Record<string, unknown>) : {}) ?? {};
+  return normalizeSynthesis(out, gaps);
+}
+
+/** Coerce the model's output into the exact shape the UI expects (defensive: models
+ *  occasionally return a string where an array is declared, which crashed .map/.filter). */
+function toStringArray(v: unknown): string[] {
+  if (Array.isArray(v)) return v.map((x) => (typeof x === "string" ? x : String(x ?? ""))).filter(Boolean);
+  if (typeof v === "string" && v.trim()) return [v.trim()];
+  return [];
+}
+
+function normalizeSynthesis(out: Record<string, unknown>, gaps: string[]): Synthesis {
+  const rawCards = Array.isArray(out.cards) ? (out.cards as Record<string, unknown>[]) : [];
+  const cards: ThesisCard[] = rawCards.map((c) => ({
+    signal: typeof c.signal === "string" ? c.signal : "",
+    category: typeof c.category === "string" ? c.category : "",
+    direction: c.direction === "bull" || c.direction === "bear" ? c.direction : "neutral",
+    horizon: c.horizon === "short-term" ? "short-term" : "long-term",
+    confidence: c.confidence === "high" || c.confidence === "low" ? c.confidence : "medium",
+    implication: typeof c.implication === "string" ? c.implication : "",
+    evidence: toStringArray(c.evidence),
+  }));
+  const gapsOut = toStringArray(out.dataGaps);
   return {
-    summary: out.summary ?? "",
-    bullCase: out.bullCase ?? [],
-    bearCase: out.bearCase ?? [],
-    cards: out.cards ?? [],
-    strongestSupport: out.strongestSupport,
-    strongestContradiction: out.strongestContradiction,
-    dataGaps: out.dataGaps ?? gaps,
+    summary: typeof out.summary === "string" ? out.summary : "",
+    bullCase: toStringArray(out.bullCase),
+    bearCase: toStringArray(out.bearCase),
+    cards,
+    strongestSupport: typeof out.strongestSupport === "string" ? out.strongestSupport : undefined,
+    strongestContradiction: typeof out.strongestContradiction === "string" ? out.strongestContradiction : undefined,
+    dataGaps: gapsOut.length ? gapsOut : gaps,
     disclaimer: DISCLAIMER,
   };
 }
