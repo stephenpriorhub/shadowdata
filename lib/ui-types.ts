@@ -8,6 +8,7 @@ export type {
   SignalCategory,
   SignalStatus,
   ConnectorTier,
+  DetailSection,
 } from "./connectors/types";
 export type { Synthesis, ThesisCard } from "./synthesis";
 

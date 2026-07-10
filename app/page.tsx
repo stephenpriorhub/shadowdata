@@ -8,6 +8,7 @@ import type {
   Synthesis,
   ThesisCard,
   LockedInfo,
+  DetailSection,
 } from "@/lib/ui-types";
 
 const CATEGORY_ICON: Record<string, string> = {
@@ -22,7 +23,6 @@ const CATEGORY_ICON: Record<string, string> = {
   supply: "🚢",
   geo: "🛰️",
 };
-
 const TIER_LABEL: Record<string, string> = { free: "Free", premium: "Premium", roadmap: "Roadmap" };
 
 function Sparkline({ series, w = 140, h = 36 }: { series: Timeseries; w?: number; h?: number }) {
@@ -68,25 +68,132 @@ function StatusPill({ status }: { status: SignalResult["status"] }) {
 function LinkButton({ link }: { link?: { label: string; url: string } }) {
   if (!link) return null;
   return (
-    <a
-      href={link.url}
-      target="_blank"
-      rel="noreferrer"
-      className="inline-flex items-center gap-1 rounded-lg border border-accent/50 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/20"
-    >
+    <a href={link.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-accent/50 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/20">
       {link.label} ↗
     </a>
   );
 }
 
-/** Compact tile for the overview (highlights) grid. */
+// ── Detail-section renderers ──────────────────────────────────────────────
+function BarsSection({ items, unit }: { items: { label: string; value: number; sublabel?: string; url?: string }[]; unit?: string }) {
+  const max = Math.max(...items.map((i) => i.value), 1);
+  return (
+    <div className="space-y-1.5">
+      {items.map((it, i) => (
+        <div key={i}>
+          <div className="flex items-baseline justify-between gap-2 text-xs">
+            <span className="truncate text-foreground/85">
+              {it.url ? <a href={it.url} target="_blank" rel="noreferrer" className="text-accent hover:underline">{it.label}</a> : it.label}
+            </span>
+            <span className="shrink-0 font-medium text-muted">{it.value.toLocaleString()}{unit ? ` ${unit}` : ""}{it.sublabel ? ` · ${it.sublabel}` : ""}</span>
+          </div>
+          <div className="mt-0.5 h-1.5 w-full rounded bg-surface-2">
+            <div className="h-1.5 rounded bg-accent" style={{ width: `${Math.max(2, (it.value / max) * 100)}%` }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MonthlySection({ months }: { months: { label: string; value: number }[] }) {
+  const max = Math.max(...months.map((m) => m.value), 1);
+  const shade = (v: number) => {
+    const r = v / max;
+    if (r === 0) return "bg-surface-2 text-muted";
+    if (r < 0.34) return "bg-bull/20 text-foreground";
+    if (r < 0.67) return "bg-bull/40 text-foreground";
+    return "bg-bull/70 text-white";
+  };
+  return (
+    <div className="grid grid-cols-6 gap-2 sm:grid-cols-12">
+      {months.map((m) => (
+        <div key={m.label} className={`rounded-lg px-1 py-2 text-center ${shade(m.value)}`}>
+          <div className="text-[10px] uppercase opacity-70">{m.label}</div>
+          <div className="text-sm font-semibold">{m.value.toLocaleString()}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TableSection({
+  columns,
+  rows,
+}: {
+  columns: { label: string; align?: "left" | "right" }[];
+  rows: { cells: (string | number)[]; href?: string; hrefLabel?: string }[];
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b border-border text-muted">
+            {columns.map((c, i) => (
+              <th key={i} className={`px-2 py-1.5 font-medium ${c.align === "right" ? "text-right" : "text-left"}`}>{c.label}</th>
+            ))}
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, ri) => (
+            <tr key={ri} className="border-b border-border/50">
+              {r.cells.map((cell, ci) => (
+                <td key={ci} className={`px-2 py-1.5 ${columns[ci]?.align === "right" ? "text-right tabular-nums" : "text-left"} text-foreground/85`}>
+                  {typeof cell === "number" ? cell.toLocaleString() : cell}
+                </td>
+              ))}
+              <td className="px-2 py-1.5 text-right">
+                {r.href && <a href={r.href} target="_blank" rel="noreferrer" className="whitespace-nowrap text-accent hover:underline">{r.hrefLabel ?? "Open ↗"}</a>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function SectionRenderer({ section }: { section: DetailSection }) {
+  return (
+    <div className="rounded-xl border border-border bg-surface p-4">
+      <h3 className="text-sm font-semibold">{section.title}</h3>
+      {"note" in section && section.note && <p className="mb-2 mt-0.5 text-[11px] text-muted">{section.note}</p>}
+      <div className="mt-2">
+        {section.kind === "timeseries" && <Sparkline series={section.series} w={520} h={90} />}
+        {section.kind === "bars" && <BarsSection items={section.items} unit={section.unit} />}
+        {section.kind === "monthly" && <MonthlySection months={section.months} />}
+        {section.kind === "table" && <TableSection columns={section.columns} rows={section.rows} />}
+        {section.kind === "keyvals" && (
+          <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {section.items.map((it, i) => (
+              <div key={i} className="rounded-lg bg-surface-2 px-3 py-2">
+                <dt className="text-[10px] uppercase tracking-wide text-muted">{it.label}</dt>
+                <dd className="text-sm font-semibold">{typeof it.value === "number" ? it.value.toLocaleString() : it.value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        {section.kind === "links" && (
+          <ul className="space-y-1.5">
+            {section.links.map((l, i) => (
+              <li key={i} className="text-xs">
+                <a href={l.url} target="_blank" rel="noreferrer" className="text-accent hover:underline">{l.label} ↗</a>
+                {l.sublabel && <span className="text-muted"> · {l.sublabel}</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Compact tile for the overview grid. Clicking opens the source's detail page. */
 function StatTile({ signal, onOpen }: { signal: SignalResult; onOpen: () => void }) {
   const primary = signal.metrics?.[0];
   return (
-    <button
-      onClick={onOpen}
-      className="flex flex-col rounded-xl border border-border bg-surface p-4 text-left transition hover:border-accent/60"
-    >
+    <button onClick={onOpen} className="flex flex-col rounded-xl border border-border bg-surface p-4 text-left transition hover:border-accent/60">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-base">{CATEGORY_ICON[signal.category] ?? "•"}</span>
@@ -110,82 +217,88 @@ function StatTile({ signal, onOpen }: { signal: SignalResult; onOpen: () => void
       ) : (
         <p className="mt-2 text-xs text-muted">{signal.note ?? signal.error ?? "—"}</p>
       )}
-      <span className="mt-2 text-[11px] text-accent">Details →</span>
+      <span className="mt-2 text-[11px] text-accent">Open details →</span>
     </button>
   );
 }
 
-/** Full detail card (sources view). */
-function SignalCardView({ signal }: { signal: SignalResult }) {
-  const [open, setOpen] = useState(true);
-  const dim = signal.status !== "ok";
+/** Full dedicated detail page for one signal. */
+function SourceDetailPage({
+  signal,
+  onBack,
+  onNav,
+  navInfo,
+}: {
+  signal: SignalResult;
+  onBack: () => void;
+  onNav: (dir: -1 | 1) => void;
+  navInfo: { index: number; total: number };
+}) {
   return (
-    <div id={`src-${signal.connectorId}`} className={`scroll-mt-16 rounded-xl border border-border bg-surface p-4 ${dim ? "opacity-80" : ""}`}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">{CATEGORY_ICON[signal.category] ?? "•"}</span>
-          <h3 className="font-medium">{signal.label}</h3>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <button onClick={onBack} className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted hover:text-foreground">← All signals</button>
+        <div className="flex items-center gap-2 text-xs text-muted">
+          <button onClick={() => onNav(-1)} className="rounded border border-border px-2 py-1 hover:text-foreground">←</button>
+          <span>{navInfo.index + 1} / {navInfo.total}</span>
+          <button onClick={() => onNav(1)} className="rounded border border-border px-2 py-1 hover:text-foreground">→</button>
         </div>
-        <StatusPill status={signal.status} />
       </div>
 
-      {signal.headline && <p className="mt-2 text-sm text-foreground/90">{signal.headline}</p>}
-      {signal.note && signal.status !== "ok" && <p className="mt-2 text-xs text-muted">{signal.note}</p>}
-      {signal.error && <p className="mt-2 text-xs text-bear">{signal.error}</p>}
+      <div className="rounded-xl border border-border bg-surface p-5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">{CATEGORY_ICON[signal.category] ?? "•"}</span>
+            <h2 className="text-xl font-semibold">{signal.label}</h2>
+          </div>
+          <StatusPill status={signal.status} />
+        </div>
+        {signal.headline && <p className="mt-2 text-sm text-foreground/90">{signal.headline}</p>}
+        {signal.note && signal.status !== "ok" && <p className="mt-2 text-xs text-muted">{signal.note}</p>}
+        {signal.error && <p className="mt-2 text-xs text-bear">{signal.error}</p>}
+        {signal.primaryLink && <div className="mt-3"><LinkButton link={signal.primaryLink} /></div>}
 
-      {signal.status === "ok" && (
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          {signal.metrics.map((m) => (
-            <div key={m.name} className="rounded-lg bg-surface-2 px-3 py-2">
-              <div className="text-[11px] uppercase tracking-wide text-muted">{m.name}</div>
-              <div className="text-sm font-semibold">
-                {typeof m.value === "number" ? m.value.toLocaleString() : m.value}
-                {m.unit ? <span className="text-muted"> {m.unit}</span> : null}
-                <TrendArrow trend={m.trend} />
-                {m.changePct !== undefined && (
-                  <span className={`ml-1 text-[10px] ${m.changePct >= 0 ? "text-bull" : "text-bear"}`}>
-                    {m.changePct >= 0 ? "+" : ""}
-                    {m.changePct.toFixed(0)}%
-                  </span>
-                )}
+        {signal.metrics.length > 0 && (
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {signal.metrics.map((m) => (
+              <div key={m.name} className="rounded-lg bg-surface-2 px-3 py-2">
+                <div className="text-[10px] uppercase tracking-wide text-muted">{m.name}</div>
+                <div className="text-sm font-semibold">
+                  {typeof m.value === "number" ? m.value.toLocaleString() : m.value}
+                  {m.unit ? <span className="text-muted"> {m.unit}</span> : null}
+                  <TrendArrow trend={m.trend} />
+                  {m.changePct !== undefined && (
+                    <span className={`ml-1 text-[10px] ${m.changePct >= 0 ? "text-bull" : "text-bear"}`}>{m.changePct >= 0 ? "+" : ""}{m.changePct.toFixed(0)}%</span>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
 
-      {signal.timeseries?.[0] && (
-        <div className="mt-3">
-          <Sparkline series={signal.timeseries[0]} w={280} h={48} />
-          <div className="text-[10px] text-muted">{signal.timeseries[0].name}</div>
-        </div>
-      )}
+      {/* Rich detail sections from the connector */}
+      {signal.detail?.map((s, i) => <SectionRenderer key={i} section={s} />)}
 
-      {(signal.primaryLink || signal.evidence.length > 0) && (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <LinkButton link={signal.primaryLink} />
-          {signal.evidence.length > 0 && (
-            <button onClick={() => setOpen((v) => !v)} className="text-xs text-accent hover:underline">
-              {open ? "Hide" : "Show"} evidence ({signal.evidence.length})
-            </button>
-          )}
+      {/* Fallback: connectors with no custom detail still show their timeseries + evidence links */}
+      {!signal.detail?.some((s) => s.kind === "timeseries") && signal.timeseries?.[0] && (
+        <div className="rounded-xl border border-border bg-surface p-4">
+          <h3 className="text-sm font-semibold">{signal.timeseries[0].name}</h3>
+          <div className="mt-2"><Sparkline series={signal.timeseries[0]} w={520} h={90} /></div>
         </div>
       )}
-      {open && signal.evidence.length > 0 && (
-        <ul className="mt-2 space-y-1.5">
-          {signal.evidence.map((e, i) => (
-            <li key={i} className="text-xs text-foreground/80">
-              {e.url ? (
-                <a href={e.url} target="_blank" rel="noreferrer" className="text-accent hover:underline">
-                  {e.summary}
-                </a>
-              ) : (
-                e.summary
-              )}
-              {e.sourceDate && <span className="text-muted"> · {e.sourceDate.slice(0, 10)}</span>}
-            </li>
-          ))}
-        </ul>
+      {!signal.detail?.some((s) => s.kind === "links") && signal.evidence.length > 0 && (
+        <div className="rounded-xl border border-border bg-surface p-4">
+          <h3 className="text-sm font-semibold">Evidence & source links</h3>
+          <ul className="mt-2 space-y-1.5">
+            {signal.evidence.map((e, i) => (
+              <li key={i} className="text-xs text-foreground/80">
+                {e.url ? <a href={e.url} target="_blank" rel="noreferrer" className="text-accent hover:underline">{e.summary}</a> : e.summary}
+                {e.sourceDate && <span className="text-muted"> · {e.sourceDate.slice(0, 10)}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );
@@ -209,7 +322,6 @@ function LockedCardView({ info }: { info: LockedInfo }) {
 function directionCls(d: ThesisCard["direction"]) {
   return d === "bull" ? "text-bull" : d === "bear" ? "text-bear" : "text-neutral";
 }
-
 function ThesisCardView({ card }: { card: ThesisCard }) {
   return (
     <div className="rounded-lg border border-border bg-surface-2 p-3">
@@ -219,19 +331,13 @@ function ThesisCardView({ card }: { card: ThesisCard }) {
       </div>
       <p className="mt-1.5 text-sm text-foreground/90">{card.implication}</p>
       <div className="mt-2 text-[10px] text-muted">confidence: {card.confidence}</div>
-      {card.evidence?.length > 0 && (
-        <ul className="mt-2 list-disc pl-4 text-[11px] text-muted">
-          {card.evidence.map((e, i) => <li key={i}>{e}</li>)}
-        </ul>
-      )}
+      {card.evidence?.length > 0 && <ul className="mt-2 list-disc pl-4 text-[11px] text-muted">{card.evidence.map((e, i) => <li key={i}>{e}</li>)}</ul>}
     </div>
   );
 }
 
 function ThesisPanel({ synthesis, loading }: { synthesis: Synthesis | null; loading: boolean }) {
-  if (loading) {
-    return <div className="rounded-xl border border-border bg-surface p-5 text-sm text-muted">Synthesizing an investment thesis from the signals…</div>;
-  }
+  if (loading) return <div className="rounded-xl border border-border bg-surface p-5 text-sm text-muted">Synthesizing an investment thesis from the signals…</div>;
   if (!synthesis) return null;
   const shortTerm = synthesis.cards.filter((c) => c.horizon === "short-term");
   const longTerm = synthesis.cards.filter((c) => c.horizon === "long-term");
@@ -239,55 +345,33 @@ function ThesisPanel({ synthesis, loading }: { synthesis: Synthesis | null; load
     <div className="rounded-xl border border-border bg-surface p-5">
       <h2 className="text-lg font-semibold">Investment Thesis</h2>
       <p className="mt-2 text-sm text-foreground/90">{synthesis.summary}</p>
-
       {(synthesis.strongestSupport || synthesis.strongestContradiction) && (
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {synthesis.strongestSupport && (
-            <div className="rounded-lg border border-bull/30 bg-bull/5 p-3">
-              <div className="text-xs font-semibold text-bull">Strongest support</div>
-              <p className="mt-1 text-xs text-foreground/85">{synthesis.strongestSupport}</p>
-            </div>
+            <div className="rounded-lg border border-bull/30 bg-bull/5 p-3"><div className="text-xs font-semibold text-bull">Strongest support</div><p className="mt-1 text-xs text-foreground/85">{synthesis.strongestSupport}</p></div>
           )}
           {synthesis.strongestContradiction && (
-            <div className="rounded-lg border border-bear/30 bg-bear/5 p-3">
-              <div className="text-xs font-semibold text-bear">Strongest contradiction</div>
-              <p className="mt-1 text-xs text-foreground/85">{synthesis.strongestContradiction}</p>
-            </div>
+            <div className="rounded-lg border border-bear/30 bg-bear/5 p-3"><div className="text-xs font-semibold text-bear">Strongest contradiction</div><p className="mt-1 text-xs text-foreground/85">{synthesis.strongestContradiction}</p></div>
           )}
         </div>
       )}
-
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
         <div>
           <h3 className="mb-2 text-sm font-semibold text-neutral">⚡ Short-term signals</h3>
-          <div className="space-y-2">
-            {shortTerm.length ? shortTerm.map((c, i) => <ThesisCardView key={i} card={c} />) : <p className="text-xs text-muted">None identified.</p>}
-          </div>
+          <div className="space-y-2">{shortTerm.length ? shortTerm.map((c, i) => <ThesisCardView key={i} card={c} />) : <p className="text-xs text-muted">None identified.</p>}</div>
         </div>
         <div>
           <h3 className="mb-2 text-sm font-semibold text-accent">📈 Long-term signals</h3>
-          <div className="space-y-2">
-            {longTerm.length ? longTerm.map((c, i) => <ThesisCardView key={i} card={c} />) : <p className="text-xs text-muted">None identified.</p>}
-          </div>
+          <div className="space-y-2">{longTerm.length ? longTerm.map((c, i) => <ThesisCardView key={i} card={c} />) : <p className="text-xs text-muted">None identified.</p>}</div>
         </div>
       </div>
-
       {(synthesis.bullCase.length > 0 || synthesis.bearCase.length > 0) && (
         <div className="mt-5 grid gap-5 sm:grid-cols-2">
-          <div>
-            <h3 className="mb-2 text-sm font-semibold text-bull">Bull case</h3>
-            <ul className="list-disc space-y-1 pl-4 text-xs text-foreground/85">{synthesis.bullCase.map((b, i) => <li key={i}>{b}</li>)}</ul>
-          </div>
-          <div>
-            <h3 className="mb-2 text-sm font-semibold text-bear">Bear case</h3>
-            <ul className="list-disc space-y-1 pl-4 text-xs text-foreground/85">{synthesis.bearCase.map((b, i) => <li key={i}>{b}</li>)}</ul>
-          </div>
+          <div><h3 className="mb-2 text-sm font-semibold text-bull">Bull case</h3><ul className="list-disc space-y-1 pl-4 text-xs text-foreground/85">{synthesis.bullCase.map((b, i) => <li key={i}>{b}</li>)}</ul></div>
+          <div><h3 className="mb-2 text-sm font-semibold text-bear">Bear case</h3><ul className="list-disc space-y-1 pl-4 text-xs text-foreground/85">{synthesis.bearCase.map((b, i) => <li key={i}>{b}</li>)}</ul></div>
         </div>
       )}
-
-      {synthesis.dataGaps.length > 0 && (
-        <p className="mt-4 text-xs text-muted"><span className="font-medium">Data gaps:</span> {synthesis.dataGaps.join(", ")}.</p>
-      )}
+      {synthesis.dataGaps.length > 0 && <p className="mt-4 text-xs text-muted"><span className="font-medium">Data gaps:</span> {synthesis.dataGaps.join(", ")}.</p>}
       <p className="mt-4 border-t border-border pt-3 text-[11px] leading-relaxed text-muted">{synthesis.disclaimer}</p>
     </div>
   );
@@ -299,10 +383,7 @@ function CompanyHeader({ entity }: { entity: ResolvedEntity }) {
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h2 className="text-xl font-semibold">{entity.companyName} <span className="text-muted">· {entity.ticker}</span></h2>
-          <p className="text-xs text-muted">
-            {entity.sector ?? "Sector n/a"}
-            {entity.marketCap ? ` · ~$${(entity.marketCap / 1e9).toFixed(1)}B mkt cap` : ""}
-          </p>
+          <p className="text-xs text-muted">{entity.sector ?? "Sector n/a"}{entity.marketCap ? ` · ~$${(entity.marketCap / 1e9).toFixed(1)}B mkt cap` : ""}</p>
         </div>
         <div className="flex gap-1.5 text-[10px] text-muted">
           <span className={`rounded px-1.5 py-0.5 ${entity.source.edgar ? "bg-bull/15 text-bull" : "bg-surface-2"}`}>EDGAR</span>
@@ -324,17 +405,13 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [synthesis, setSynthesis] = useState<Synthesis | null>(null);
   const [synthLoading, setSynthLoading] = useState(false);
-  const [view, setView] = useState<"overview" | "sources">("overview");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const runId = useRef(0);
 
   const runSynthesis = useCallback(async (tk: string, sigs: SignalResult[]) => {
     setSynthLoading(true);
     try {
-      const res = await fetch("/api/synthesize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ticker: tk, signals: sigs }),
-      });
+      const res = await fetch("/api/synthesize", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ticker: tk, signals: sigs }) });
       const json = await res.json();
       if (res.ok) setSynthesis(json.synthesis);
     } catch {
@@ -355,15 +432,11 @@ export default function Home() {
     setPending([]);
     setLocked([]);
     setSynthesis(null);
-    setView("overview");
+    setSelectedId(null);
 
     const collected: SignalResult[] = [];
     try {
-      const res = await fetch("/api/signals", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ticker: tk }),
-      });
+      const res = await fetch("/api/signals", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ticker: tk }) });
       if (!res.ok || !res.body) {
         const j = await res.json().catch(() => ({}));
         throw new Error(j.error || `Request failed (${res.status})`);
@@ -399,9 +472,7 @@ export default function Home() {
           }
         }
       }
-      if (id === runId.current && collected.some((s) => s.status === "ok")) {
-        void runSynthesis(tk, collected);
-      }
+      if (id === runId.current && collected.some((s) => s.status === "ok")) void runSynthesis(tk, collected);
     } catch (e) {
       if (id === runId.current) setError(e instanceof Error ? e.message : "Search failed");
     } finally {
@@ -409,26 +480,29 @@ export default function Home() {
     }
   }, [ticker, runSynthesis]);
 
-  const openSource = useCallback((connectorId: string) => {
-    setView("sources");
-    setTimeout(() => document.getElementById(`src-${connectorId}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-  }, []);
-
   const pendingWaiting = pending.filter((p) => !signals.some((s) => s.connectorId === p.id));
   const okCount = useMemo(() => signals.filter((s) => s.status === "ok").length, [signals]);
-  // Tiles: live signals first, then the rest.
   const orderedSignals = useMemo(
     () => [...signals].sort((a, b) => (a.status === "ok" ? 0 : 1) - (b.status === "ok" ? 0 : 1)),
     [signals]
+  );
+  const selected = orderedSignals.find((s) => s.connectorId === selectedId) ?? null;
+  const selectedIdx = orderedSignals.findIndex((s) => s.connectorId === selectedId);
+
+  const navSource = useCallback(
+    (dir: -1 | 1) => {
+      if (selectedIdx < 0) return;
+      const next = (selectedIdx + dir + orderedSignals.length) % orderedSignals.length;
+      setSelectedId(orderedSignals[next].connectorId);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    },
+    [selectedIdx, orderedSignals]
   );
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
       <header className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">
-          AltEdge <span className="text-accent">·</span>{" "}
-          <span className="text-base font-normal text-muted">Alternative Data Terminal</span>
-        </h1>
+        <h1 className="text-2xl font-bold tracking-tight">AltEdge <span className="text-accent">·</span> <span className="text-base font-normal text-muted">Alternative Data Terminal</span></h1>
         <p className="mt-1 text-sm text-muted">Search a ticker for live alternative-data signals and an evidence-backed investment thesis.</p>
       </header>
 
@@ -441,90 +515,46 @@ export default function Home() {
           className="flex-1 rounded-lg border border-border bg-surface px-4 py-2.5 text-sm outline-none focus:border-accent"
           maxLength={10}
         />
-        <button onClick={search} disabled={loading} className="rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50">
-          {loading ? "Scanning…" : "Analyze"}
-        </button>
+        <button onClick={search} disabled={loading} className="rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50">{loading ? "Scanning…" : "Analyze"}</button>
       </div>
 
       {error && <div className="mt-4 rounded-lg border border-bear/40 bg-bear/10 px-4 py-3 text-sm text-bear">{error}</div>}
 
       {entity && (
-        <>
-          <div className="mt-6 flex items-center justify-between gap-3">
-            <div className="flex gap-2">
-              <button
-                onClick={() => setView("overview")}
-                className={`rounded-lg px-3 py-1.5 text-sm ${view === "overview" ? "bg-accent text-white" : "border border-border text-muted"}`}
-              >
-                Overview
-              </button>
-              <button
-                onClick={() => setView("sources")}
-                className={`rounded-lg px-3 py-1.5 text-sm ${view === "sources" ? "bg-accent text-white" : "border border-border text-muted"}`}
-              >
-                All sources & data{okCount ? ` (${okCount})` : ""}
-              </button>
-            </div>
-          </div>
+        <div className="mt-6 space-y-6">
+          <CompanyHeader entity={entity} />
 
-          <div className="mt-4 space-y-6">
-            <CompanyHeader entity={entity} />
+          {selected ? (
+            <SourceDetailPage signal={selected} onBack={() => setSelectedId(null)} onNav={navSource} navInfo={{ index: selectedIdx, total: orderedSignals.length }} />
+          ) : (
+            <>
+              {(synthLoading || synthesis) && <ThesisPanel synthesis={synthesis} loading={synthLoading} />}
 
-            {view === "overview" ? (
-              <>
-                {(synthLoading || synthesis) && <ThesisPanel synthesis={synthesis} loading={synthLoading} />}
-
-                {(orderedSignals.length > 0 || pendingWaiting.length > 0) && (
-                  <section>
-                    <div className="mb-3 flex items-center justify-between">
-                      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Signal highlights</h2>
-                      {okCount > 0 && (
-                        <button onClick={() => setView("sources")} className="text-xs text-accent hover:underline">
-                          View all sources & data →
-                        </button>
-                      )}
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {orderedSignals.map((s) => (
-                        <StatTile key={s.connectorId} signal={s} onOpen={() => openSource(s.connectorId)} />
-                      ))}
-                      {pendingWaiting.map((p) => (
-                        <div key={p.id} className="rounded-xl border border-border bg-surface p-4">
-                          <div className="flex items-center gap-2 text-muted">
-                            <span className="text-base">{CATEGORY_ICON[p.category] ?? "•"}</span>
-                            <span className="text-sm font-medium">{p.label}</span>
-                          </div>
-                          <div className="mt-3 h-2 w-1/2 animate-pulse rounded bg-surface-2" />
-                          <div className="mt-2 h-2 w-2/3 animate-pulse rounded bg-surface-2" />
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                )}
-              </>
-            ) : (
-              <>
+              {(orderedSignals.length > 0 || pendingWaiting.length > 0) && (
                 <section>
-                  <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">All sources & data</h2>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {orderedSignals.map((s) => <SignalCardView key={s.connectorId} signal={s} />)}
+                  <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">Signal highlights <span className="font-normal normal-case">— click any card for the full breakdown{okCount ? ` (${okCount} live)` : ""}</span></h2>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {orderedSignals.map((s) => <StatTile key={s.connectorId} signal={s} onOpen={() => setSelectedId(s.connectorId)} />)}
+                    {pendingWaiting.map((p) => (
+                      <div key={p.id} className="rounded-xl border border-border bg-surface p-4">
+                        <div className="flex items-center gap-2 text-muted"><span className="text-base">{CATEGORY_ICON[p.category] ?? "•"}</span><span className="text-sm font-medium">{p.label}</span></div>
+                        <div className="mt-3 h-2 w-1/2 animate-pulse rounded bg-surface-2" />
+                        <div className="mt-2 h-2 w-2/3 animate-pulse rounded bg-surface-2" />
+                      </div>
+                    ))}
                   </div>
                 </section>
+              )}
 
-                {locked.length > 0 && (
-                  <section>
-                    <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
-                      Coming soon <span className="font-normal normal-case">— premium & roadmap connectors</span>
-                    </h2>
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {locked.map((l) => <LockedCardView key={l.id} info={l} />)}
-                    </div>
-                  </section>
-                )}
-              </>
-            )}
-          </div>
-        </>
+              {locked.length > 0 && (
+                <section>
+                  <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">Coming soon <span className="font-normal normal-case">— premium & roadmap connectors</span></h2>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{locked.map((l) => <LockedCardView key={l.id} info={l} />)}</div>
+                </section>
+              )}
+            </>
+          )}
+        </div>
       )}
 
       {!entity && !loading && !error && (

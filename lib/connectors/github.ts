@@ -8,7 +8,7 @@
  * unauthenticated (60/hr) so public data still loads rather than erroring.
  */
 import { getJson, HttpError, pctChange, trendOf, classifyFailure } from "./http";
-import { result, type Connector, type Evidence, type Metric, type Timeseries } from "./types";
+import { result, type Connector, type DetailSection, type Evidence, type Metric, type Timeseries } from "./types";
 
 const meta = {
   id: "github",
@@ -145,12 +145,26 @@ export const githubConnector: Connector = {
           ? `${totalStars.toLocaleString()} stars across ${repos.length} repos; top-repo commit volume ${recentDeltaPct >= 0 ? "up" : "down"} ${Math.abs(recentDeltaPct).toFixed(0)}% vs prior 8 wks.`
           : `${totalStars.toLocaleString()} stars across ${repos.length} public repos.`;
 
+      const detail: DetailSection[] = [];
+      if (ts) detail.push({ kind: "timeseries", title: `Weekly commit activity — ${top.full_name}`, series: ts });
+      detail.push({
+        kind: "table",
+        title: "Top public repositories",
+        columns: [{ label: "Repository" }, { label: "Stars", align: "right" }, { label: "Forks", align: "right" }, { label: "Updated", align: "right" }],
+        rows: repos.slice(0, 15).map((r) => ({
+          cells: [r.full_name, r.stargazers_count, r.forks_count, r.pushed_at.slice(0, 10)],
+          href: r.html_url,
+          hrefLabel: "Open ↗",
+        })),
+      });
+
       return result(meta, {
         status: "ok",
         headline,
         metrics,
         timeseries: ts ? [ts] : undefined,
         evidence,
+        detail,
         primaryLink: { label: "View on GitHub", url: `https://github.com/${encodeURIComponent(org)}` },
         tookMs: Date.now() - start,
       });

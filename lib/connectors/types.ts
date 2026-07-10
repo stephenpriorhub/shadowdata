@@ -86,10 +86,27 @@ export interface SignalResult {
   evidence: Evidence[];
   /** Optional prominent "view source" button (e.g. the company's ImportYeti/GitHub page). */
   primaryLink?: { label: string; url: string };
+  /** Optional rich sections rendered on the source's dedicated detail page. */
+  detail?: DetailSection[];
   error?: string;
   fetchedAt: string;
   tookMs?: number;
 }
+
+/** Declarative rich-detail sections a connector can emit for its detail page. */
+export type DetailSection =
+  | { kind: "timeseries"; title: string; series: Timeseries; note?: string }
+  | {
+      kind: "table";
+      title: string;
+      columns: { label: string; align?: "left" | "right" }[];
+      rows: { cells: (string | number)[]; href?: string; hrefLabel?: string }[];
+      note?: string;
+    }
+  | { kind: "bars"; title: string; unit?: string; items: { label: string; value: number; sublabel?: string; url?: string }[]; note?: string }
+  | { kind: "monthly"; title: string; months: { label: string; value: number }[]; note?: string }
+  | { kind: "links"; title: string; links: { label: string; url: string; sublabel?: string }[] }
+  | { kind: "keyvals"; title: string; items: { label: string; value: string | number }[] };
 
 export type ConnectorTier = "free" | "premium" | "roadmap";
 

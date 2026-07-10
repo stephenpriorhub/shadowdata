@@ -11,7 +11,7 @@
  * rejects the request — the connector degrades gracefully to "no-data".
  */
 import { postJson, classifyFailure } from "./http";
-import { result, type Connector, type Evidence, type Metric, type Timeseries } from "./types";
+import { result, type Connector, type DetailSection, type Evidence, type Metric, type Timeseries } from "./types";
 
 const meta = {
   id: "patents",
@@ -126,12 +126,22 @@ export const patentsConnector: Connector = {
           sourceDate: m.grantDate,
         }));
 
+      const detail: DetailSection[] = [
+        { kind: "bars", title: "Patents granted per year", unit: "patents", items: yearCounts.map((y) => ({ label: String(y.year), value: y.count })) },
+        {
+          kind: "links",
+          title: "Most recent grants",
+          links: evidence.filter((e) => e.url).map((e) => ({ label: e.summary, url: e.url! , sublabel: e.sourceDate })),
+        },
+      ];
+
       return result(meta, {
         status: "ok",
         headline: `${total.toLocaleString()} patents granted in 5 years; ${latest.count.toLocaleString()} in ${latest.year}.`,
         metrics,
         timeseries: [ts],
         evidence,
+        detail,
         tookMs: Date.now() - start,
       });
     } catch (e) {

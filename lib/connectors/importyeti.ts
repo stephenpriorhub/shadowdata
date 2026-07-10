@@ -4,13 +4,19 @@
  * Rising import volume can lead reported revenue; a drop can flag a slowdown or
  * destocking. Supplier concentration is a supply-chain risk read.
  *
- * ImportYeti is credit-metered (1 credit per company lookup), so results are cached
- * for 30 days per company. Auth header is `IYApiKey`. Even without the API (no key,
- * or a miss) the card always links out to the company's ImportYeti page.
+ * Credit-metered (1 credit per company lookup) → cached 30 days per company.
+ * Auth header is `IYApiKey`. Even without the API the card links out to ImportYeti.
  */
 import { getJson, classifyFailure } from "./http";
 import { getCached, setCached } from "../store";
-import { result, type Connector, type Evidence, type Metric, type Timeseries } from "./types";
+import {
+  result,
+  type Connector,
+  type DetailSection,
+  type Evidence,
+  type Metric,
+  type Timeseries,
+} from "./types";
 
 const meta = {
   id: "importyeti",
@@ -21,40 +27,67 @@ const meta = {
 
 const CACHE_NS = "importyeti";
 const CACHE_TTL = 1000 * 60 * 60 * 24 * 30; // 30 days — conserve metered credits
+const IY = "https://www.importyeti.com";
 
+interface Supplier {
+  supplier_name?: string;
+  supplier_address_country?: string;
+  key?: string; // e.g. /supplier/hon-hai-precision-industrial
+  total_shipments_company?: number;
+  shipments_percents_company?: number;
+  shipments_12m?: number;
+}
+interface HsCode {
+  hs_code?: string;
+  description?: string;
+  shipments?: number;
+  shipments_12m?: number;
+}
+interface Lane {
+  exit_port_country?: string;
+  entry_port?: string;
+  shipments?: number;
+}
+interface Bol {
+  date_formatted?: string;
+  Product_Description?: string;
+  Shipper_Name?: string;
+  Country?: string;
+  HS_Code?: string;
+}
 interface IYData {
   title?: string;
   total_shipments?: number;
   date_range?: { start_date?: string; end_date?: string };
-  time_series?: Record<string, number>;
-  suppliers_table?: { supplier_name?: string; supplier_address_country?: string }[];
-  hs_codes?: { description?: string; shipments_12m?: number }[];
+  time_series?: Record<string, { shipments?: number }>;
+  suppliers_table?: Supplier[];
+  hs_codes?: HsCode[];
+  lane_permutations?: Lane[];
+  recent_bols?: Bol[];
   carriers_per_country?: Record<string, unknown>;
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/&/g, " and ")
-    .replace(/[.,]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+  return name.toLowerCase().replace(/&/g, " and ").replace(/[.,]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
-/** Parse ImportYeti's DD/MM/YYYY month keys into sortable ISO. */
-function toIso(key: string): string | null {
-  const m = key.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+/** ImportYeti month keys are DD/MM/YYYY. Returns {iso, monthIndex} or null. */
+function parseKey(k: string): { iso: string; month: number } | null {
+  const m = k.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (!m) return null;
-  return `${m[3]}-${m[2]}-${m[1]}`;
+  return { iso: `${m[3]}-${m[2]}-${m[1]}`, month: parseInt(m[2], 10) - 1 };
 }
 
 async function fetchProfile(slug: string, key: string, signal: AbortSignal): Promise<IYData | null> {
   const cached = getCached<IYData>(CACHE_NS, slug, CACHE_TTL);
   if (cached) return cached;
-  const res = await getJson<{ data?: IYData }>(
-    `https://data.importyeti.com/v1.0/company/${encodeURIComponent(slug)}`,
-    { signal, headers: { IYApiKey: key }, timeoutMs: 15_000 }
-  );
+  const res = await getJson<{ data?: IYData }>(`https://data.importyeti.com/v1.0/company/${encodeURIComponent(slug)}`, {
+    signal,
+    headers: { IYApiKey: key },
+    timeoutMs: 15_000,
+  });
   const data = res.data ?? null;
   if (data) setCached(CACHE_NS, slug, data);
   return data;
@@ -63,12 +96,12 @@ async function fetchProfile(slug: string, key: string, signal: AbortSignal): Pro
 export const importYetiConnector: Connector = {
   ...meta,
   enabled: true,
-  description: "U.S. import bill-of-lading volume, trend, top suppliers and product mix from ImportYeti.",
+  description: "U.S. import bill-of-lading volume, trend, top suppliers, product mix and trade lanes from ImportYeti.",
   requiredIdentifiers: [],
   async fetch(entity, ctx) {
     const start = Date.now();
     const slug = entity.identifiers.importYetiSlug || slugify(entity.companyName);
-    const link = { label: "Open ImportYeti profile", url: `https://www.importyeti.com/company/${slug}` };
+    const link = { label: "Open ImportYeti profile", url: `${IY}/company/${slug}` };
     const key = process.env.IMPORTYETI_API_KEY;
 
     if (!key) {
@@ -91,25 +124,28 @@ export const importYetiConnector: Connector = {
         });
       }
 
-      // Monthly shipment time series → last-12mo vs prior-12mo (YoY volume).
-      let ts: Timeseries | undefined;
+      // ── Monthly time series (values are objects: {shipments,...}) ──
+      const series = Object.entries(data.time_series ?? {})
+        .map(([k, v]) => ({ p: parseKey(k), v: v?.shipments ?? 0 }))
+        .filter((x): x is { p: { iso: string; month: number }; v: number } => !!x.p)
+        .sort((a, b) => a.p.iso.localeCompare(b.p.iso));
+
+      let monthlyTs: Timeseries | undefined;
       let yoy: number | undefined;
-      if (data.time_series) {
-        const points = Object.entries(data.time_series)
-          .map(([k, v]) => ({ iso: toIso(k), v }))
-          .filter((p): p is { iso: string; v: number } => !!p.iso)
-          .sort((a, b) => a.iso.localeCompare(b.iso));
-        if (points.length) {
-          ts = { name: "Monthly shipments", points: points.slice(-24).map((p) => ({ t: p.iso, v: p.v })) };
-          const last12 = points.slice(-12).reduce((s, p) => s + p.v, 0);
-          const prior12 = points.slice(-24, -12).reduce((s, p) => s + p.v, 0);
-          if (prior12 > 0) yoy = ((last12 - prior12) / prior12) * 100;
-        }
+      const byCalendarMonth = new Array(12).fill(0);
+      if (series.length) {
+        monthlyTs = { name: "Monthly shipments", points: series.map((s) => ({ t: s.p.iso, v: s.v })) };
+        for (const s of series) byCalendarMonth[s.p.month] += s.v;
+        const last12 = series.slice(-12).reduce((a, s) => a + s.v, 0);
+        const prior12 = series.slice(-24, -12).reduce((a, s) => a + s.v, 0);
+        if (prior12 > 0) yoy = ((last12 - prior12) / prior12) * 100;
       }
 
-      const topSupplier = data.suppliers_table?.[0];
-      const topHs = (data.hs_codes ?? []).slice().sort((a, b) => (b.shipments_12m ?? 0) - (a.shipments_12m ?? 0))[0];
-      const origins = Object.keys(data.carriers_per_country ?? {}).slice(0, 3);
+      const suppliers = (data.suppliers_table ?? []).slice(0, 12);
+      const topSupplier = suppliers[0];
+      const hs = (data.hs_codes ?? []).slice().sort((a, b) => (b.shipments ?? 0) - (a.shipments ?? 0));
+      const lanes = (data.lane_permutations ?? []).slice().sort((a, b) => (b.shipments ?? 0) - (a.shipments ?? 0)).slice(0, 8);
+      const bols = (data.recent_bols ?? []).slice(0, 12);
 
       const metrics: Metric[] = [
         { name: "Total shipments", value: data.total_shipments },
@@ -119,29 +155,81 @@ export const importYetiConnector: Connector = {
           trend: yoy === undefined ? undefined : yoy > 5 ? "up" : yoy < -5 ? "down" : "flat",
         },
         { name: "Top supplier", value: topSupplier?.supplier_name ?? "—" },
-        { name: "Top origins", value: origins.length ? origins.join(", ") : "—" },
+        {
+          name: "Supplier concentration",
+          value: topSupplier?.shipments_percents_company ? `${topSupplier.shipments_percents_company.toFixed(0)}% top` : "—",
+        },
       ];
 
-      const evidence: Evidence[] = [];
-      for (const s of (data.suppliers_table ?? []).slice(0, 4)) {
-        evidence.push({ summary: `Supplier: ${s.supplier_name}${s.supplier_address_country ? ` (${s.supplier_address_country})` : ""}` });
-      }
-      if (topHs?.description) evidence.push({ summary: `Top product category: ${topHs.description}` });
-      if (data.date_range?.start_date) {
-        evidence.push({ summary: `Coverage: ${data.date_range.start_date} → ${data.date_range.end_date ?? "present"}` });
-      }
+      // ── Rich detail sections ──
+      const detail: DetailSection[] = [];
+      if (monthlyTs) detail.push({ kind: "timeseries", title: "Monthly import shipments", series: monthlyTs, note: `${data.date_range?.start_date ?? ""} – ${data.date_range?.end_date ?? "present"}` });
+      if (series.length)
+        detail.push({
+          kind: "monthly",
+          title: "Import frequency by calendar month (all-time)",
+          months: MONTHS.map((label, i) => ({ label, value: byCalendarMonth[i] })),
+          note: "Which months this company imports most — seasonality of its supply chain.",
+        });
+      if (suppliers.length)
+        detail.push({
+          kind: "table",
+          title: "Top suppliers",
+          columns: [{ label: "Supplier" }, { label: "Country" }, { label: "Shipments", align: "right" }, { label: "% of imports", align: "right" }],
+          rows: suppliers.map((s) => ({
+            cells: [
+              s.supplier_name ?? "—",
+              s.supplier_address_country ?? "—",
+              s.total_shipments_company ?? 0,
+              s.shipments_percents_company ? `${s.shipments_percents_company.toFixed(1)}%` : "—",
+            ],
+            href: s.key ? `${IY}${s.key}` : undefined,
+            hrefLabel: "Bills of lading ↗",
+          })),
+          note: "Supplier concentration is a supply-chain risk read; a shift in top suppliers can signal sourcing changes.",
+        });
+      if (hs.length)
+        detail.push({
+          kind: "bars",
+          title: "Product mix (by HS code)",
+          unit: "shipments",
+          items: hs.slice(0, 8).map((h) => ({ label: `${h.hs_code} · ${h.description ?? ""}`, value: h.shipments ?? 0, sublabel: h.shipments_12m ? `${h.shipments_12m} in last 12m` : undefined })),
+        });
+      if (lanes.length)
+        detail.push({
+          kind: "bars",
+          title: "Top trade lanes",
+          unit: "shipments",
+          items: lanes.map((l) => ({ label: `${l.exit_port_country ?? "?"} → ${l.entry_port ?? "?"}`, value: l.shipments ?? 0 })),
+        });
+      if (bols.length)
+        detail.push({
+          kind: "table",
+          title: "Recent bills of lading",
+          columns: [{ label: "Date" }, { label: "Product" }, { label: "Shipper" }, { label: "Origin" }],
+          rows: bols.map((b) => ({
+            cells: [b.date_formatted ?? "—", (b.Product_Description ?? "—").slice(0, 60), b.Shipper_Name ?? "—", b.Country ?? "—"],
+          })),
+        });
+      detail.push({ kind: "links", title: "Source", links: [{ label: "Full ImportYeti company profile", url: link.url }] });
+
+      const evidence: Evidence[] = suppliers.slice(0, 3).map((s) => ({
+        summary: `Supplier: ${s.supplier_name}${s.supplier_address_country ? ` (${s.supplier_address_country})` : ""}${s.shipments_percents_company ? ` — ${s.shipments_percents_company.toFixed(0)}% of imports` : ""}`,
+        url: s.key ? `${IY}${s.key}` : undefined,
+      }));
 
       const headline =
         yoy === undefined
-          ? `${data.total_shipments.toLocaleString()} U.S. import shipments on record; top supplier ${topSupplier?.supplier_name ?? "n/a"}.`
+          ? `${data.total_shipments.toLocaleString()} U.S. import shipments; top supplier ${topSupplier?.supplier_name ?? "n/a"}.`
           : `Import volume ${yoy >= 0 ? "up" : "down"} ${Math.abs(yoy).toFixed(0)}% YoY (${data.total_shipments.toLocaleString()} shipments); top supplier ${topSupplier?.supplier_name ?? "n/a"}.`;
 
       return result(meta, {
         status: "ok",
         headline,
         metrics,
-        timeseries: ts ? [ts] : undefined,
+        timeseries: monthlyTs ? [monthlyTs] : undefined,
         evidence,
+        detail,
         primaryLink: link,
         tookMs: Date.now() - start,
       });
@@ -149,10 +237,7 @@ export const importYetiConnector: Connector = {
       const f = classifyFailure(e);
       return result(meta, {
         ...f,
-        note:
-          f.status === "no-data"
-            ? `No ImportYeti profile matched "${entity.companyName}". Link-out still available.`
-            : f.note,
+        note: f.status === "no-data" ? `No ImportYeti profile matched "${entity.companyName}". Link-out still available.` : f.note,
         primaryLink: link,
         tookMs: Date.now() - start,
       });

@@ -5,7 +5,7 @@
  * a sudden collapse in postings = a hiring freeze / cost-cutting (short-term flag).
  */
 import { getJson, HttpError } from "./http";
-import { result, type Connector, type Evidence, type Metric } from "./types";
+import { result, type Connector, type DetailSection, type Evidence, type Metric } from "./types";
 
 const meta = {
   id: "jobs",
@@ -127,11 +127,21 @@ export const jobsConnector: Connector = {
         }))
     );
 
+    const detail: DetailSection[] = [
+      { kind: "bars", title: "Open roles by department", unit: "roles", items: topDepts.slice(0, 12).map(([dept, n]) => ({ label: dept, value: n })) },
+      {
+        kind: "links",
+        title: "Sample open roles",
+        links: roles.filter((r) => r.url).slice(0, 15).map((r) => ({ label: `${r.title} (${r.department})`, url: r.url, sublabel: r.postedAt?.slice(0, 10) })),
+      },
+    ];
+
     return result(meta, {
       status: "ok",
       headline: `${roles.length} open roles${recent.length ? ` (${recent.length} posted in 30d)` : ""}; heaviest in ${topDepts[0]?.[0] ?? "—"}.`,
       metrics,
       evidence,
+      detail,
       tookMs: Date.now() - start,
     });
   },

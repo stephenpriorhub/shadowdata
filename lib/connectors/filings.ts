@@ -4,7 +4,7 @@
  * cadence is baseline. Free, authoritative, no key — just a required User-Agent.
  */
 import { getJson, classifyFailure } from "./http";
-import { result, type Connector, type Evidence, type Metric } from "./types";
+import { result, type Connector, type DetailSection, type Evidence, type Metric } from "./types";
 
 const meta = {
   id: "filings",
@@ -86,11 +86,26 @@ export const filingsConnector: Connector = {
           ? `Elevated event activity: ${eightKs90.length} 8-Ks in the last 90 days.`
           : `${within90.length} filings in the last 90 days (last: ${last.form} on ${last.date}).`;
 
+      const detail: DetailSection[] = [
+        {
+          kind: "table",
+          title: "Recent filings",
+          columns: [{ label: "Form" }, { label: "Description" }, { label: "Date", align: "right" }],
+          rows: rows.slice(0, 20).map((x) => ({
+            cells: [x.form, x.desc || "—", x.date],
+            href: link(x),
+            hrefLabel: "Open ↗",
+          })),
+          note: "8-K = material event (M&A, guidance, leadership). A cluster is a short-term catalyst flag.",
+        },
+      ];
+
       return result(meta, {
         status: "ok",
         headline,
         metrics,
         evidence,
+        detail,
         tookMs: Date.now() - start,
       });
     } catch (e) {
