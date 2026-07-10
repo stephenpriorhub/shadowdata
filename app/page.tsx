@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ResolvedEntity,
   SignalResult,
@@ -237,7 +237,7 @@ function SourceDetailPage({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
-        <button onClick={onBack} className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted hover:text-foreground">← All signals</button>
+        <button onClick={onBack} className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted hover:text-foreground">← Back to results</button>
         <div className="flex items-center gap-2 text-xs text-muted">
           <button onClick={() => onNav(-1)} className="rounded border border-border px-2 py-1 hover:text-foreground">←</button>
           <span>{navInfo.index + 1} / {navInfo.total}</span>
@@ -494,6 +494,29 @@ export default function Home() {
   const selected = orderedSignals.find((s) => s.connectorId === selectedId) ?? null;
   const selectedIdx = orderedSignals.findIndex((s) => s.connectorId === selectedId);
 
+  // Open a detail page and push a history entry so the browser Back button returns to results.
+  const openDetail = useCallback((id: string) => {
+    try {
+      window.history.pushState({ altedgeDetail: id }, "");
+    } catch {
+      /* history unavailable */
+    }
+    setSelectedId(id);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  const backToResults = useCallback(() => {
+    if (typeof window !== "undefined" && window.history.state?.altedgeDetail) window.history.back();
+    else setSelectedId(null);
+  }, []);
+
+  // Browser Back / gesture from a detail page returns to the results list, not off the app.
+  useEffect(() => {
+    const onPop = () => setSelectedId(null);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
   const navSource = useCallback(
     (dir: -1 | 1) => {
       if (selectedIdx < 0) return;
@@ -530,7 +553,7 @@ export default function Home() {
           <CompanyHeader entity={entity} />
 
           {selected ? (
-            <SourceDetailPage signal={selected} onBack={() => setSelectedId(null)} onNav={navSource} navInfo={{ index: selectedIdx, total: orderedSignals.length }} />
+            <SourceDetailPage signal={selected} onBack={backToResults} onNav={navSource} navInfo={{ index: selectedIdx, total: orderedSignals.length }} />
           ) : (
             <>
               {(synthLoading || synthesis) && <ThesisPanel synthesis={synthesis} loading={synthLoading} />}
@@ -539,7 +562,7 @@ export default function Home() {
                 <section>
                   <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">Signal highlights <span className="font-normal normal-case">— click any card for the full breakdown{okCount ? ` (${okCount} live)` : ""}</span></h2>
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    {orderedSignals.map((s) => <StatTile key={s.connectorId} signal={s} onOpen={() => setSelectedId(s.connectorId)} />)}
+                    {orderedSignals.map((s) => <StatTile key={s.connectorId} signal={s} onOpen={() => openDetail(s.connectorId)} />)}
                     {pendingWaiting.map((p) => (
                       <div key={p.id} className="rounded-xl border border-border bg-surface p-4">
                         <div className="flex items-center gap-2 text-muted"><span className="text-base">{CATEGORY_ICON[p.category] ?? "•"}</span><span className="text-sm font-medium">{p.label}</span></div>
