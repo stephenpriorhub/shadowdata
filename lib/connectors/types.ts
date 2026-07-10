@@ -30,6 +30,7 @@ export interface EntityIdentifiers {
   subreddits?: string[];
   greenhouseSlug?: string; // boards.greenhouse.io/<slug>
   leverSlug?: string; // jobs.lever.co/<slug>
+  importYetiSlug?: string; // importyeti.com/company/<slug>
   patentAssignees?: string[]; // legal assignee names to search
   wikipediaTitle?: string; // en.wikipedia article title
   brandTerms?: string[]; // free-text search terms (HN, Reddit)
@@ -83,6 +84,8 @@ export interface SignalResult {
   metrics: Metric[];
   timeseries?: Timeseries[];
   evidence: Evidence[];
+  /** Optional prominent "view source" button (e.g. the company's ImportYeti/GitHub page). */
+  primaryLink?: { label: string; url: string };
   error?: string;
   fetchedAt: string;
   tookMs?: number;

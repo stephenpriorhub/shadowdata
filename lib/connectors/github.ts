@@ -1,11 +1,11 @@
 /**
  * GitHub / open-source activity. Thesis: for companies whose product IS software,
  * commit/release/contributor velocity is a leading indicator of shipping pace and
- * developer mindshare — a long-term structural signal, and sometimes a short-term
- * catalyst (a big release, a viral repo).
+ * developer mindshare — a long-term structural signal, sometimes a short-term catalyst.
  *
- * Uses the REST API. Works unauthenticated (60 req/hr); GITHUB_TOKEN raises it to
- * 5000/hr and is used when present.
+ * Uses the REST API. GITHUB_TOKEN raises the rate limit to 5000/hr when present, but
+ * if the shared token is expired/invalid (401), we transparently retry
+ * unauthenticated (60/hr) so public data still loads rather than erroring.
  */
 import { getJson, HttpError, pctChange, trendOf, classifyFailure } from "./http";
 import { result, type Connector, type Evidence, type Metric, type Timeseries } from "./types";
@@ -29,32 +29,41 @@ interface Repo {
   fork: boolean;
 }
 
+/** GET the GitHub API with the token if present; on 401 (bad token) retry unauthenticated. */
+async function ghGet<T>(url: string, signal: AbortSignal): Promise<T> {
+  const base: Record<string, string> = { Accept: "application/vnd.github+json" };
+  const token = process.env.GITHUB_TOKEN;
+  if (token) {
+    try {
+      return await getJson<T>(url, { signal, headers: { ...base, Authorization: `Bearer ${token}` } });
+    } catch (e) {
+      if (e instanceof HttpError && e.status === 401) {
+        return await getJson<T>(url, { signal, headers: base }); // token dead → unauthenticated
+      }
+      throw e;
+    }
+  }
+  return await getJson<T>(url, { signal, headers: base });
+}
+
 async function listRepos(org: string, signal: AbortSignal): Promise<Repo[]> {
-  const base = `https://api.github.com/orgs/${encodeURIComponent(org)}/repos?per_page=100&sort=pushed&type=public`;
-  const headers: Record<string, string> = { Accept: "application/vnd.github+json" };
-  if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+  const orgUrl = `https://api.github.com/orgs/${encodeURIComponent(org)}/repos?per_page=100&sort=pushed&type=public`;
   try {
-    return await getJson<Repo[]>(base, { signal, headers });
+    return await ghGet<Repo[]>(orgUrl, signal);
   } catch (e) {
-    // Not an org? Fall back to a user account with the same handle.
     if (e instanceof HttpError && e.status === 404) {
-      const alt = `https://api.github.com/users/${encodeURIComponent(org)}/repos?per_page=100&sort=pushed&type=public`;
-      return await getJson<Repo[]>(alt, { signal, headers });
+      const userUrl = `https://api.github.com/users/${encodeURIComponent(org)}/repos?per_page=100&sort=pushed&type=public`;
+      return await ghGet<Repo[]>(userUrl, signal);
     }
     throw e;
   }
 }
 
-async function commitActivity(
-  fullName: string,
-  signal: AbortSignal
-): Promise<Timeseries | undefined> {
-  const headers: Record<string, string> = { Accept: "application/vnd.github+json" };
-  if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+async function commitActivity(fullName: string, signal: AbortSignal): Promise<Timeseries | undefined> {
   try {
-    const weeks = await getJson<{ week: number; total: number }[]>(
+    const weeks = await ghGet<{ week: number; total: number }[]>(
       `https://api.github.com/repos/${fullName}/stats/commit_activity`,
-      { signal, headers }
+      signal
     );
     if (!Array.isArray(weeks) || weeks.length === 0) return undefined; // 202 => still computing
     return {
@@ -97,14 +106,10 @@ export const githubConnector: Connector = {
       }
 
       const totalStars = repos.reduce((s, r) => s + r.stargazers_count, 0);
-      const mostRecentPush = repos
-        .map((r) => r.pushed_at)
-        .sort()
-        .reverse()[0];
+      const mostRecentPush = repos.map((r) => r.pushed_at).sort().reverse()[0];
       const top = repos[0];
       const ts = await commitActivity(top.full_name, ctx.signal);
 
-      // Short vs long term: last-8-weeks vs prior-8-weeks commit delta.
       let recentDeltaPct: number | undefined;
       let recentCommits: number | undefined;
       if (ts) {
@@ -117,11 +122,8 @@ export const githubConnector: Connector = {
 
       const metrics: Metric[] = [
         { name: "Public repos", value: repos.length },
-        { name: "Total stars", value: totalStars, trend: undefined },
-        {
-          name: "Most recent push",
-          value: new Date(mostRecentPush).toISOString().slice(0, 10),
-        },
+        { name: "Total stars", value: totalStars },
+        { name: "Most recent push", value: new Date(mostRecentPush).toISOString().slice(0, 10) },
       ];
       if (recentCommits !== undefined) {
         metrics.push({
@@ -149,6 +151,7 @@ export const githubConnector: Connector = {
         metrics,
         timeseries: ts ? [ts] : undefined,
         evidence,
+        primaryLink: { label: "View on GitHub", url: `https://github.com/${encodeURIComponent(org)}` },
         tookMs: Date.now() - start,
       });
     } catch (e) {

@@ -55,20 +55,6 @@ export const stubConnectors: Connector[] = [
     description: "Android install & rating momentum. No free official API — needs a third-party provider.",
   }),
   lockedConnector({
-    id: "google-trends",
-    label: "Search Interest (Google Trends)",
-    category: "web",
-    tier: "premium",
-    description: "Relative search-query interest over time. Needs a stable Trends/SerpApi integration.",
-  }),
-  lockedConnector({
-    id: "importyeti",
-    label: "Supply Chain / Imports",
-    category: "supply",
-    tier: "premium",
-    description: "Company-level bill-of-lading import volume & suppliers. Requires ImportYeti / Panjiva.",
-  }),
-  lockedConnector({
     id: "coresignal",
     label: "Workforce Depth",
     category: "hiring",

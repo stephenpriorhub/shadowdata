@@ -87,6 +87,10 @@ const IDENTIFIER_TOOL = {
         type: "string",
         description: "The company's Lever job-board slug (jobs.lever.co/<slug>) if it uses Lever. Omit if unknown.",
       },
+      importYetiSlug: {
+        type: "string",
+        description: "The company's ImportYeti slug from importyeti.com/company/<slug> (usually the kebab-cased legal name, e.g. 'apple-inc'). Omit if unsure; a fallback is derived from the company name.",
+      },
       patentAssignees: {
         type: "array",
         items: { type: "string" },

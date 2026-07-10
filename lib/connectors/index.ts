@@ -15,15 +15,19 @@ import { redditConnector } from "./reddit";
 import { patentsConnector } from "./patents";
 import { jobsConnector } from "./jobs";
 import { webConnector } from "./web";
+import { trendsConnector } from "./trends";
 import { appsConnector } from "./apps";
+import { importYetiConnector } from "./importyeti";
 import { stubConnectors } from "./stubs";
 
 export const CONNECTORS: Connector[] = [
   githubConnector,
   filingsConnector,
   jobsConnector,
+  trendsConnector,
   webConnector,
   appsConnector,
+  importYetiConnector,
   hackernewsConnector,
   redditConnector,
   patentsConnector,

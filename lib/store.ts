@@ -98,3 +98,30 @@ export function getSnapshots(ticker: string): Snapshot[] {
     return [];
   }
 }
+
+// ── Generic TTL cache (for credit-metered / rate-limited external calls) ──────
+const CACHE_DIR = path.join(DATA_DIR, "cache");
+
+function cacheFile(namespace: string, key: string): string {
+  const safe = key.toUpperCase().replace(/[^A-Z0-9._-]/g, "_");
+  return path.join(CACHE_DIR, namespace, `${safe}.json`);
+}
+
+/** Read a cached value if present and younger than ttlMs; else null. */
+export function getCached<T>(namespace: string, key: string, ttlMs: number): T | null {
+  const file = cacheFile(namespace, key);
+  if (!fs.existsSync(file)) return null;
+  try {
+    const { at, value } = JSON.parse(fs.readFileSync(file, "utf-8")) as { at: string; value: T };
+    if (Date.now() - new Date(at).getTime() > ttlMs) return null;
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+export function setCached<T>(namespace: string, key: string, value: T): void {
+  const file = cacheFile(namespace, key);
+  ensureDir(path.dirname(file));
+  fs.writeFileSync(file, JSON.stringify({ at: new Date().toISOString(), value }, null, 2), "utf-8");
+}
