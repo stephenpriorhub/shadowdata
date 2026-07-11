@@ -26,6 +26,7 @@ const CATEGORY_ICON: Record<string, string> = {
   geo: "🛰️",
   options: "🐋",
   realestate: "🏢",
+  robotics: "🤖",
 };
 const TIER_LABEL: Record<string, string> = { free: "Free", premium: "Premium", roadmap: "Roadmap" };
 
@@ -622,6 +623,15 @@ export default function Home() {
     }
   }, [ticker, runSynthesis]);
 
+  // Deep-link support: /?ticker=NVDA auto-runs a search (used by the Robotics Watchlist links).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const t = new URLSearchParams(window.location.search).get("ticker");
+    if (t) search(t.toUpperCase());
+    // Intentionally run once on mount only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const pendingWaiting = pending.filter((p) => !signals.some((s) => s.connectorId === p.id));
   const okCount = useMemo(() => signals.filter((s) => s.status === "ok").length, [signals]);
   const orderedSignals = useMemo(
@@ -763,6 +773,25 @@ export default function Home() {
               <button className="text-accent" onClick={() => search("KO")}>KO</button>.
             </div>
           )}
+
+          <a
+            href="/robotics"
+            className="group block rounded-xl border border-border bg-gradient-to-br from-accent/10 to-surface p-5 transition hover:border-accent/60"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className="text-3xl">🤖</span>
+                <div>
+                  <h2 className="text-base font-semibold">Robotics Watchlist</h2>
+                  <p className="mt-0.5 text-sm text-muted">
+                    Every publicly-traded company in the humanoid-robot supply chain — OEMs and their
+                    motor, sensor, battery, compute &amp; rare-earth suppliers. Powered by Humanoids.FYI.
+                  </p>
+                </div>
+              </div>
+              <span className="shrink-0 text-sm font-medium text-accent group-hover:translate-x-0.5">Open →</span>
+            </div>
+          </a>
         </div>
       )}
     </main>

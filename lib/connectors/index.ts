@@ -22,6 +22,7 @@ import { workforceConnector } from "./workforce";
 import { optionsFlowConnector } from "./unusualwhales";
 import { satelliteConnector } from "./satellite";
 import { realEstateConnector } from "./realestate";
+import { roboticsConnector } from "./robotics";
 import { stubConnectors } from "./stubs";
 
 export const CONNECTORS: Connector[] = [
@@ -39,6 +40,7 @@ export const CONNECTORS: Connector[] = [
   patentsConnector,
   realEstateConnector,
   satelliteConnector,
+  roboticsConnector,
   ...stubConnectors,
 ];
 

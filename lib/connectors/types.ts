@@ -16,7 +16,8 @@ export type SignalCategory =
   | "supply"
   | "geo"
   | "options"
-  | "realestate";
+  | "realestate"
+  | "robotics";
 
 export type SignalStatus = "ok" | "no-data" | "not-applicable" | "error";
 
