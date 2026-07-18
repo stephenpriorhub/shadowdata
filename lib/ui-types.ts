@@ -9,6 +9,8 @@ export type {
   SignalStatus,
   ConnectorTier,
   DetailSection,
+  ImageryFrame,
+  ImageryRead,
 } from "./connectors/types";
 export type { Synthesis, ThesisCard } from "./synthesis";
 

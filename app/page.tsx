@@ -9,6 +9,7 @@ import type {
   ThesisCard,
   LockedInfo,
   DetailSection,
+  ImageryFrame,
 } from "@/lib/ui-types";
 import type { Fundamentals } from "@/lib/fundamentals";
 import type { Watchlist } from "@/lib/watchlist";
@@ -159,6 +160,74 @@ function TableSection({
   );
 }
 
+/** A single dated PlanetScope view: a 3×3 grid of proxied scene tiles centered on the site. */
+function ImageryTileGrid({ frame }: { frame: ImageryFrame }) {
+  const offsets = [-1, 0, 1];
+  return (
+    <div className="grid w-fit grid-cols-3 overflow-hidden rounded-lg border border-border bg-surface-2">
+      {offsets.flatMap((dy) =>
+        offsets.map((dx) => {
+          const src = `/api/sat/tile?item=${encodeURIComponent(frame.item)}&z=${frame.z}&x=${frame.x + dx}&y=${frame.y + dy}`;
+          return (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img key={`${dx}:${dy}`} src={src} alt="" width={96} height={96} loading="lazy" className="block h-24 w-24 object-cover" />
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+function ImagerySection({ sites }: { sites: Extract<DetailSection, { kind: "imagery" }>["sites"] }) {
+  return (
+    <div className="space-y-4">
+      {sites.map((s, i) => (
+        <div key={i} className="rounded-lg bg-surface-2/40 p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="text-xs font-medium text-foreground/90">{s.label}</span>
+            {s.mapHref && (
+              <a href={s.mapHref} target="_blank" rel="noreferrer" className="whitespace-nowrap text-[11px] text-accent hover:underline">
+                🛰 Google Maps ↗
+              </a>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-4">
+            {s.recent && (
+              <figure>
+                <ImageryTileGrid frame={s.recent} />
+                <figcaption className="mt-1 text-[10px] uppercase tracking-wide text-muted">Recent · {s.recent.date}</figcaption>
+              </figure>
+            )}
+            {s.prior && (
+              <figure>
+                <ImageryTileGrid frame={s.prior} />
+                <figcaption className="mt-1 text-[10px] uppercase tracking-wide text-muted">~6 mo prior · {s.prior.date}</figcaption>
+              </figure>
+            )}
+            {!s.recent && !s.prior && <p className="text-[11px] text-muted">No cloud-free imagery found for this site.</p>}
+          </div>
+          {s.read && (
+            <div className="mt-2 flex items-start gap-2 rounded-md bg-surface px-2.5 py-2">
+              <span
+                className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${
+                  s.read.direction === "bull"
+                    ? "bg-emerald-500/15 text-emerald-400"
+                    : s.read.direction === "bear"
+                      ? "bg-rose-500/15 text-rose-400"
+                      : "bg-surface-2 text-muted"
+                }`}
+              >
+                {s.read.direction} · {s.read.confidence}
+              </span>
+              <p className="text-[11px] leading-snug text-foreground/85">{s.read.observation}</p>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function SectionRenderer({ section }: { section: DetailSection }) {
   return (
     <div className="rounded-xl border border-border bg-surface p-4">
@@ -169,6 +238,7 @@ function SectionRenderer({ section }: { section: DetailSection }) {
         {section.kind === "bars" && <BarsSection items={section.items} unit={section.unit} />}
         {section.kind === "monthly" && <MonthlySection months={section.months} />}
         {section.kind === "table" && <TableSection columns={section.columns} rows={section.rows} />}
+        {section.kind === "imagery" && <ImagerySection sites={section.sites} />}
         {section.kind === "keyvals" && (
           <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {section.items.map((it, i) => (

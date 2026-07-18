@@ -109,7 +109,37 @@ export type DetailSection =
   | { kind: "bars"; title: string; unit?: string; items: { label: string; value: number; sublabel?: string; url?: string }[]; note?: string }
   | { kind: "monthly"; title: string; months: { label: string; value: number }[]; note?: string }
   | { kind: "links"; title: string; links: { label: string; url: string; sublabel?: string }[] }
-  | { kind: "keyvals"; title: string; items: { label: string; value: string | number }[] };
+  | { kind: "keyvals"; title: string; items: { label: string; value: string | number }[] }
+  | {
+      /** Before/after satellite imagery per site. Each frame is a 3×3 grid of proxied Planet tiles
+       *  centered on (z,x,y); the renderer expands the grid and points <img> at /api/sat/tile. */
+      kind: "imagery";
+      title: string;
+      note?: string;
+      sites: {
+        label: string;
+        mapHref?: string;
+        recent?: ImageryFrame;
+        prior?: ImageryFrame;
+        read?: ImageryRead;
+      }[];
+    };
+
+/** Claude's vision read of a before/after pair — what visibly changed and what it implies. */
+export interface ImageryRead {
+  observation: string; // concrete, cites what's visible; "no clear change" when nothing stands out
+  direction: Direction; // bull | bear | neutral for the business
+  confidence: "low" | "medium" | "high";
+}
+
+/** One dated satellite view: the center tile of a scene at a given zoom. */
+export interface ImageryFrame {
+  date: string; // ISO acquisition date
+  item: string; // Planet scene id
+  z: number;
+  x: number;
+  y: number;
+}
 
 export type ConnectorTier = "free" | "premium" | "roadmap";
 

@@ -13,7 +13,118 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getCached, setCached } from "../store";
 import { geocodePlace } from "../geocode";
 import { SYNTH_MODEL } from "../models";
-import { result, type Connector, type DetailSection } from "./types";
+import { findScene, lonLatToTile, fetchTileBase64 } from "../planet";
+import { result, type Connector, type DetailSection, type ImageryFrame, type ImageryRead } from "./types";
+
+const IMAGERY_ZOOM = 15; // ~2.4 km field of view for the 3×3 tile grid — good for a facility/port
+const READ_ZOOM = 14; // one ~2.4 km tile covers the whole site in a single image for the vision read
+const PRIOR_DAYS = 183; // "before" imagery targets ~6 months back for a visible delta
+const MAX_IMAGED_SITES = 4; // bound Planet quota + latency per scan
+
+/** One imaged site as resolved/cached: display frames + lat/lng + Claude's before/after read. */
+interface ImagedSite {
+  label: string;
+  mapHref: string;
+  lat: number;
+  lng: number;
+  recent?: ImageryFrame;
+  prior?: ImageryFrame;
+  read?: ImageryRead;
+}
+
+const READS_TOOL = {
+  name: "emit_imagery_reads",
+  description:
+    "For each site you are shown two satellite images of the SAME place — image A (recent) and image B (~6 months earlier). Report only changes actually visible in the pixels (lot fill / vehicle density, ships or rail cars, new construction or demolition, storage-tank shadows/levels, mine or crop footprint, flaring). If nothing clearly changed, say so — do NOT invent activity. Judge each change's implication for the company's revenue/production/demand as bull, bear, or neutral, and set confidence honestly (imagery is coarse; low is common).",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      reads: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            index: { type: "integer", description: "The 0-based SITE index exactly as labeled in the message." },
+            observation: { type: "string", description: "≤200 chars, concrete, cites what is visible. 'No clear change' if none." },
+            direction: { type: "string", enum: ["bull", "bear", "neutral"] },
+            confidence: { type: "string", enum: ["low", "medium", "high"] },
+          },
+          required: ["index", "observation", "direction", "confidence"],
+        },
+      },
+    },
+    required: ["reads"],
+  },
+};
+
+/**
+ * One Claude vision call over every before/after pair. Best-effort: on any failure the imagery
+ * still renders without reads. Mutates each site's `read` in place; returns nothing.
+ */
+async function readImagery(client: Anthropic, sites: ImagedSite[], signal?: AbortSignal): Promise<void> {
+  const pairs = sites
+    .map((s, i) => ({ s, i }))
+    .filter(({ s }) => s.recent && s.prior); // a "change" read needs both frames
+  if (!pairs.length) return;
+
+  const content: Anthropic.MessageParam["content"] = [
+    {
+      type: "text",
+      text: "Compare each site's two satellite images (A = recent, B = ~6 months earlier) and emit one read per site via the tool. Reference each site by its SITE index below.",
+    },
+  ];
+  const fetched: { i: number }[] = [];
+  for (const { s, i } of pairs) {
+    const t = lonLatToTile(s.lat, s.lng, READ_ZOOM);
+    const [a, b] = await Promise.all([
+      fetchTileBase64(s.recent!.item, READ_ZOOM, t.x, t.y, signal),
+      fetchTileBase64(s.prior!.item, READ_ZOOM, t.x, t.y, signal),
+    ]);
+    if (!a || !b) continue;
+    fetched.push({ i });
+    content.push({ type: "text", text: `SITE ${i}: ${s.label} — A=recent ${s.recent!.date}, B=prior ${s.prior!.date}` });
+    content.push({ type: "image", source: { type: "base64", media_type: "image/png", data: a } });
+    content.push({ type: "image", source: { type: "base64", media_type: "image/png", data: b } });
+  }
+  if (!fetched.length) return;
+
+  const msg = await client.messages.create(
+    {
+      model: SYNTH_MODEL,
+      max_tokens: 1500,
+      tool_choice: { type: "tool", name: READS_TOOL.name },
+      tools: [READS_TOOL],
+      messages: [{ role: "user", content }],
+    },
+    { signal }
+  );
+  const tool = msg.content.find((b) => b.type === "tool_use");
+  const input = (tool && "input" in tool ? tool.input : {}) as {
+    reads?: { index: number; observation: string; direction: ImageryRead["direction"]; confidence: ImageryRead["confidence"] }[];
+  };
+  for (const r of input.reads ?? []) {
+    const site = sites[r.index];
+    if (site && r.observation) site.read = { observation: r.observation, direction: r.direction, confidence: r.confidence };
+  }
+}
+
+/** Resolve a recent + prior PlanetScope frame for one located site. Null fields = no coverage. */
+async function imageSite(
+  lat: number,
+  lng: number,
+  now: Date,
+  signal?: AbortSignal
+): Promise<{ recent?: ImageryFrame; prior?: ImageryFrame }> {
+  const { x, y } = lonLatToTile(lat, lng, IMAGERY_ZOOM);
+  const priorBefore = new Date(now.getTime() - PRIOR_DAYS * 86_400_000);
+  const [recent, prior] = await Promise.all([
+    findScene(lat, lng, { before: now, signal }),
+    findScene(lat, lng, { before: priorBefore, signal }),
+  ]);
+  const frame = (s: Awaited<ReturnType<typeof findScene>>): ImageryFrame | undefined =>
+    s ? { date: s.acquired.slice(0, 10), item: s.id, z: IMAGERY_ZOOM, x, y } : undefined;
+  return { recent: frame(recent), prior: frame(prior) };
+}
 
 const meta = { id: "satellite", label: "Satellite Imagery", category: "geo", tier: "premium" } as const;
 
@@ -66,17 +177,17 @@ export const satelliteConnector: Connector = {
   enabled: true,
   description: "Company-specific ideas for evaluating the business from satellite imagery (Planet), each with a site address and map link.",
   requiredIdentifiers: [],
-  timeoutMs: 45_000, // Claude idea-generation needs more than the default 18s
+  timeoutMs: 70_000, // Claude idea-generation + a before/after vision pass over live imagery
   async fetch(entity, ctx) {
     const start = Date.now();
     const planetReady = !!process.env.PLANET_API_KEY;
     if (!process.env.ANTHROPIC_API_KEY) {
       return result(meta, { status: "no-data", note: "Satellite analysis ideas require ANTHROPIC_API_KEY.", tookMs: Date.now() - start });
     }
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     try {
       let payload = getCached<{ ideas: Idea[]; overview: string }>("satellite3", entity.ticker, 1000 * 60 * 60 * 24 * 30);
       if (!payload) {
-        const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
         const msg = await client.messages.create(
           {
             model: SYNTH_MODEL,
@@ -117,14 +228,63 @@ export const satelliteConnector: Connector = {
         return result(meta, { status: "no-data", note: "Could not derive satellite analyses for this company.", tookMs: Date.now() - start });
       }
 
+      // Resolve real before/after PlanetScope imagery for the located sites, then have Claude
+      // read the pair (#3). Cached 7 days, independent of the 30-day idea cache, so imagery +
+      // its read stay current without re-running idea generation.
+      let imaged: ImagedSite[] = [];
+      if (planetReady) {
+        const cachedImg = getCached<ImagedSite[]>("satelliteimg", entity.ticker, 1000 * 60 * 60 * 24 * 7);
+        if (cachedImg) {
+          imaged = cachedImg;
+        } else {
+          const targets = payload.ideas.filter((i) => i.lat != null && i.lng != null).slice(0, MAX_IMAGED_SITES);
+          imaged = await Promise.all(
+            targets.map(async (i): Promise<ImagedSite> => {
+              const frames = await imageSite(i.lat!, i.lng!, ctx.now, ctx.signal);
+              return { label: i.target, mapHref: mapsLink(i.lat, i.lng, i.address), lat: i.lat!, lng: i.lng!, ...frames };
+            })
+          );
+          // Only sites that actually have at least one frame are worth showing/caching.
+          imaged = imaged.filter((s) => s.recent || s.prior);
+          // Vision pass over the before/after pairs — best-effort, never fails the signal.
+          if (imaged.length) {
+            try {
+              await readImagery(client, imaged, ctx.signal);
+            } catch {
+              /* imagery still renders without reads */
+            }
+            setCached("satelliteimg", entity.ticker, imaged);
+          }
+        }
+      }
+      const withBoth = imaged.filter((s) => s.recent && s.prior).length;
+      const reads = imaged.filter((s) => s.read);
+
       const detail: DetailSection[] = [
+        ...(imaged.length
+          ? [
+              {
+                kind: "imagery" as const,
+                title: "Before / after — live PlanetScope imagery, read by Claude",
+                note: "Left = recent, right = ~6 months earlier, each centered on the site (~2.4 km across). Claude's read of each pair is shown below it and folded into the thesis. Imagery © Planet Labs PBC.",
+                sites: imaged.map((s) => ({ label: s.label, mapHref: s.mapHref, recent: s.recent, prior: s.prior, read: s.read })),
+              },
+            ]
+          : []),
         {
           kind: "keyvals",
           title: "Imagery pipeline",
           items: [
             { label: "Provider", value: "Planet (PlanetScope ~3m daily)" },
-            { label: "Status", value: planetReady ? "Connected — key active" : "Not configured (set PLANET_API_KEY)" },
-            { label: "Automated CV analysis", value: "Roadmap (v1 is the analysis playbook below)" },
+            {
+              label: "Status",
+              value: !planetReady
+                ? "Not configured (set PLANET_API_KEY)"
+                : imaged.length
+                  ? `Live — ${imaged.length} site${imaged.length > 1 ? "s" : ""} imaged, ${withBoth} with before/after`
+                  : "Connected — no cloud-free coverage found for these sites",
+            },
+            { label: "Automated CV analysis", value: "Roadmap (metric extraction from the frames below)" },
           ],
         },
         {
@@ -157,13 +317,25 @@ export const satelliteConnector: Connector = {
 
       return result(meta, {
         status: "ok",
-        headline: `${payload.ideas.length} satellite-analysis ideas for ${entity.companyName}, each with a site address. Planet imagery ${planetReady ? "connected" : "not yet configured"}.`,
+        headline: reads.length
+          ? `Claude read ${reads.length} before/after PlanetScope pair${reads.length > 1 ? "s" : ""} for ${entity.companyName}: ${reads[0].read!.observation}`
+          : imaged.length
+            ? `Live PlanetScope imagery for ${imaged.length} ${entity.companyName} site${imaged.length > 1 ? "s" : ""} (${withBoth} with before/after), plus ${payload.ideas.length} analysis ideas.`
+            : `${payload.ideas.length} satellite-analysis ideas for ${entity.companyName}, each with a site address. Planet imagery ${planetReady ? "connected" : "not yet configured"}.`,
         metrics: [
+          { name: "Sites imaged", value: imaged.length },
+          { name: "Before/after read", value: reads.length },
           { name: "Analysis ideas", value: payload.ideas.length },
           { name: "Sites located", value: payload.ideas.filter((i) => i.lat != null).length },
-          { name: "Imagery", value: planetReady ? "Planet ✓" : "not set" },
         ],
-        evidence: payload.ideas.slice(0, 3).map((i) => ({ summary: `${i.target}${i.address ? ` — ${i.address}` : ""}`, url: mapsLink(i.lat, i.lng, i.address ?? i.placeQuery) })),
+        // Vision reads first so they reach the thesis (synthesis brief takes the first 3 evidence).
+        evidence: [
+          ...reads.map((s) => ({
+            summary: `Imagery — ${s.label} (${s.recent!.date} vs ${s.prior!.date}): ${s.read!.observation} [${s.read!.direction}, ${s.read!.confidence} confidence]`,
+            url: s.mapHref,
+          })),
+          ...payload.ideas.slice(0, 3).map((i) => ({ summary: `${i.target}${i.address ? ` — ${i.address}` : ""}`, url: mapsLink(i.lat, i.lng, i.address ?? i.placeQuery) })),
+        ].slice(0, 6),
         detail,
         tookMs: Date.now() - start,
       });
