@@ -125,7 +125,10 @@ export function PostCard({
   onEdit,
   onDelete,
   extraAction,
+  full = false,
 }: {
+  /** full = the post's own page (whole write-up); otherwise a feed blurb linking to it. */
+  full?: boolean;
   post: Post;
   categories: Category[];
   dataTypes?: Category[];
@@ -139,7 +142,6 @@ export function PostCard({
   onDelete?: () => void;
   extraAction?: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
   const cats = post.categoryIds.map((id) => categories.find((c) => c.id === id)).filter((c): c is Category => !!c);
   const types = (post.dataTypeIds ?? []).map((id) => dataTypes.find((c) => c.id === id)).filter((c): c is Category => !!c);
   const savedIn = (folders ?? []).filter((f) => f.postIds.includes(post.id));
@@ -172,26 +174,48 @@ export function PostCard({
           </button>
         ))}
       </div>
-      <h2 className="mt-1.5 text-base font-semibold leading-snug">
-        {post.sourceUrl ? (
-          <a href={post.sourceUrl} target="_blank" rel="noreferrer noopener" className="hover:text-accent">
-            {post.title} <span className="text-xs text-muted">↗</span>
-          </a>
-        ) : (
-          post.title
-        )}
-      </h2>
-      {post.summary && <p className="mt-1.5 whitespace-pre-line text-sm text-foreground/85">{post.summary}</p>}
-      {post.body && (
+      {full ? (
         <>
-          {open && (
-            <div className="mt-3 whitespace-pre-line border-l-2 border-border pl-3 text-sm leading-relaxed text-foreground/85">
+          <h1 className="mt-2 text-2xl font-bold leading-tight tracking-tight">{post.title}</h1>
+          {post.summary && <p className="mt-3 whitespace-pre-line text-base text-foreground/90">{post.summary}</p>}
+          {post.body && (
+            <div className="mt-4 whitespace-pre-line border-t border-border pt-4 text-sm leading-relaxed text-foreground/85">
               <Linkified text={post.body} />
             </div>
           )}
-          <button onClick={() => setOpen(!open)} className="mt-2 text-xs font-medium text-accent">
-            {open ? "Show less" : "Read more"}
-          </button>
+          {post.bigIdea && (
+            <section className="mt-5 rounded-xl border border-accent/40 bg-accent/10 p-4">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-accent">💡 The Big Idea</h2>
+              <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-foreground">{post.bigIdea}</p>
+            </section>
+          )}
+          {post.sourceUrl && (
+            <a
+              href={post.sourceUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="mt-4 inline-block rounded-lg border border-border px-3 py-1.5 text-sm text-accent hover:border-accent/60"
+            >
+              Read the source{post.sourceName ? ` on ${post.sourceName}` : ""} ↗
+            </a>
+          )}
+        </>
+      ) : (
+        <>
+          <h2 className="mt-1.5 text-base font-semibold leading-snug">
+            <Link href={`/intel/p/${post.id}`} className="hover:text-accent">
+              {post.title}
+            </Link>
+          </h2>
+          {blurb(post) && (
+            <p className="mt-1.5 line-clamp-3 whitespace-pre-line text-sm text-foreground/85">
+              {post.bigIdea && <span className="mr-1 font-semibold text-accent">💡 Big idea:</span>}
+              {blurb(post)}
+            </p>
+          )}
+          <Link href={`/intel/p/${post.id}`} className="mt-2 inline-block text-xs font-medium text-accent">
+            Read full post →
+          </Link>
         </>
       )}
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
@@ -212,6 +236,7 @@ export function PostCard({
             </Link>
           )}
           {extraAction}
+          <ShareButton postId={post.id} />
           {onEdit && (
             <button onClick={onEdit} className="rounded-md px-2 py-1 text-xs text-muted hover:text-foreground">
               Edit
@@ -228,6 +253,54 @@ export function PostCard({
         </div>
       </div>
     </article>
+  );
+}
+
+/** Feed blurb: the Big Idea, else the summary, else the opening of the body. */
+function blurb(post: Post): string {
+  if (post.bigIdea) return post.bigIdea;
+  if (post.summary) return post.summary;
+  const b = post.body.replace(/\s+/g, " ").trim();
+  return b.length > 280 ? `${b.slice(0, 280).replace(/\s\S*$/, "")}…` : b;
+}
+
+export function postUrl(id: string): string {
+  return `${window.location.origin}/intel/p/${id}`;
+}
+
+function ShareButton({ postId }: { postId: string }) {
+  const [state, setState] = useState<"idle" | "copied" | "manual">("idle");
+  const url = typeof window === "undefined" ? "" : postUrl(postId);
+  const share = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setState("copied");
+      setTimeout(() => setState("idle"), 2000);
+    } catch {
+      // Clipboard can be blocked (permissions, embedded browsers) — show the link to copy by hand.
+      setState("manual");
+    }
+  };
+  return (
+    <span className="relative">
+      <button onClick={share} className="rounded-md px-2 py-1 text-xs text-muted hover:text-foreground" title="Copy a link to this post">
+        {state === "copied" ? "✓ Link copied" : "Share"}
+      </button>
+      {state === "manual" && (
+        <span className="absolute right-0 bottom-full z-20 mb-1 flex w-80 items-center gap-1 rounded-lg border border-border bg-surface-2 p-2 shadow-xl">
+          <input
+            readOnly
+            autoFocus
+            value={url}
+            onFocus={(e) => e.currentTarget.select()}
+            className="min-w-0 flex-1 rounded border border-border bg-surface px-2 py-1 text-xs outline-none"
+          />
+          <button onClick={() => setState("idle")} className="px-1 text-xs text-muted hover:text-foreground">
+            ✕
+          </button>
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -323,6 +396,7 @@ export function PostEditor({
     title: post?.title ?? "",
     summary: post?.summary ?? "",
     body: post?.body ?? "",
+    bigIdea: post?.bigIdea ?? "",
     sourceUrl: post?.sourceUrl ?? "",
     sourceName: post?.sourceName ?? "",
     tickers: post?.tickers.join(", ") ?? "",
@@ -343,6 +417,7 @@ export function PostEditor({
       title: f.title,
       summary: f.summary,
       body: f.body,
+      bigIdea: f.bigIdea,
       sourceUrl: f.sourceUrl,
       sourceName: f.sourceName,
       tickers: f.tickers,
@@ -383,6 +458,9 @@ export function PostEditor({
           </Field>
           <Field label="Body">
             <textarea className={input} rows={8} value={f.body} onChange={(e) => set("body", e.target.value)} />
+          </Field>
+          <Field label="💡 The Big Idea — simplified takeaway + key data (also the feed blurb)">
+            <textarea className={input} rows={4} maxLength={1500} value={f.bigIdea} onChange={(e) => set("bigIdea", e.target.value)} />
           </Field>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Source URL">

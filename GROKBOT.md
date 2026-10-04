@@ -72,10 +72,21 @@ anything paywalled you couldn't actually read, and recycled week-old news.
   Good: "Micron adds 3 HBM packaging lines in Taiwan, per local permit filings".
   Bad: "Big news for memory stocks!"
 - **summary:** 1–3 sentences on what happened and **why it might matter** for the
-  company. This is the line on the feed card, so make it self-contained.
+  company. It opens the post's own page.
 - **body** (optional but encouraged): the detail. What the source says, the key
   numbers, context (what changed versus before), and what to watch next. Plain text.
   Use blank lines between paragraphs. Paste extra source URLs inline; they become links.
+- **bigIdea** (**always include**): "The Big Idea" box at the foot of the post, and
+  **the blurb shown on the feed card**, so it's the most-read thing you write. A plain-English
+  version for a busy editor: one sentence with the core takeaway, then up to 3 short lines
+  of the key data, each starting with "• ". Every number needs its unit and timeframe.
+  Max 1500 chars, but aim for under 400. Example:
+  ```
+  Micron is physically expanding HBM packaging capacity, months ahead of any earnings disclosure.
+  • 3 new advanced-packaging lines approved (Taichung, Sep 2026)
+  • Adds to 2 lines approved earlier this year
+  • Next check: capex guidance on the December earnings call
+  ```
 - **sourceUrl:** the **original** source (filing, permit, job board, primary article),
   not an aggregator, whenever you can find it. Required in practice: no source, no post.
 - **sourceName:** the outlet or site, e.g. "SEC EDGAR", "Reuters", "LinkedIn Jobs".
@@ -142,6 +153,7 @@ Send one post object, `{ "posts": [ ... ] }`, or a bare array. **Max 50 per requ
       "title": "Required. Max 300 chars",
       "summary": "1-3 sentences, max 2000 chars",
       "body": "Plain text, max 50000 chars",
+      "bigIdea": "One-sentence takeaway + up to 3 '• ' key-data lines (feed blurb), max 1500",
       "sourceUrl": "https://...",
       "sourceName": "Publisher or site name",
       "imageUrl": "https://... (optional)",
@@ -154,6 +166,9 @@ Send one post object, `{ "posts": [ ... ] }`, or a bare array. **Max 50 per requ
   ]
 }
 ```
+
+Each post gets its own shareable page at `https://shadowdata.oxfordhub.app/intel/p/<id>`
+(the `id` from the response).
 
 Response `201`. Check `skipped`. `"duplicate"` means it was already in the feed,
 which is fine. `"missing title"` means you sent a bad item.
@@ -204,6 +219,7 @@ curl -X POST https://shadowdata.oxfordhub.app/api/intel/posts \
   -d '{
     "title": "Micron adds HBM packaging capacity in Taiwan, per permit filings",
     "summary": "New permits show three additional advanced-packaging lines at Micron'\''s Taichung site. Adds to HBM supply heading into 2027.",
+    "bigIdea": "Micron is expanding HBM packaging capacity ahead of any earnings disclosure.\n• 3 new packaging lines approved (Taichung, Sep 2026)",
     "sourceUrl": "https://example.gov.tw/permits/2026-1234",
     "sourceName": "Taichung City permit registry",
     "tickers": ["MU"],
@@ -218,6 +234,7 @@ curl -X POST https://shadowdata.oxfordhub.app/api/intel/posts \
 ## 7. Quick checklist before each post
 
 - [ ] Recent, concrete, and something an editor didn't already know
+- [ ] `bigIdea` written: one-line takeaway + key data with units and dates
 - [ ] I read the source myself, and `sourceUrl` points to the original
 - [ ] Every fact and ticker is in the source; rumours are labelled
 - [ ] No price targets, no buy/sell language

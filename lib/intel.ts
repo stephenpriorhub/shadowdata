@@ -18,6 +18,8 @@ export interface IntelPost {
   title: string;
   summary: string;
   body: string;
+  /** "The Big Idea": the simplified takeaway + key data. Shown as the box at the foot of the post and as the feed blurb. */
+  bigIdea: string;
   sourceUrl: string | null;
   sourceName: string | null;
   imageUrl: string | null;
@@ -82,7 +84,10 @@ function read(): Store {
   if (!fs.existsSync(FILE)) return structuredClone(EMPTY);
   try {
     const s = { ...structuredClone(EMPTY), ...(JSON.parse(fs.readFileSync(FILE, "utf-8")) as Partial<Store>) };
-    for (const p of s.posts) p.dataTypeIds ??= []; // posts created before Shadow Data Types existed
+    for (const p of s.posts) {
+      p.dataTypeIds ??= []; // posts created before Shadow Data Types existed
+      p.bigIdea ??= ""; // ...and before the Big Idea box
+    }
     return s;
   } catch {
     // Never silently start from empty over a corrupt file — that would wipe the feed on next write.
@@ -165,6 +170,7 @@ export interface PostInput {
   title?: unknown;
   summary?: unknown;
   body?: unknown;
+  bigIdea?: unknown;
   sourceUrl?: unknown;
   sourceName?: unknown;
   imageUrl?: unknown;
@@ -214,6 +220,7 @@ export function createPosts(inputs: PostInput[], author: string) {
         title,
         summary: str(input.summary, 2000),
         body: str(input.body, 50000),
+        bigIdea: str(input.bigIdea, 1500),
         sourceUrl,
         sourceName: str(input.sourceName, 120) || null,
         imageUrl: safeUrl(input.imageUrl),
@@ -245,6 +252,7 @@ export function updatePost(id: string, input: PostInput): IntelPost {
     }
     if (input.summary !== undefined) p.summary = str(input.summary, 2000);
     if (input.body !== undefined) p.body = str(input.body, 50000);
+    if (input.bigIdea !== undefined) p.bigIdea = str(input.bigIdea, 1500);
     if (input.sourceUrl !== undefined) p.sourceUrl = safeUrl(input.sourceUrl);
     if (input.sourceName !== undefined) p.sourceName = str(input.sourceName, 120) || null;
     if (input.imageUrl !== undefined) p.imageUrl = safeUrl(input.imageUrl);
@@ -306,6 +314,7 @@ export function listPosts(query: FeedQuery) {
         !q ||
         p.title.toLowerCase().includes(q) ||
         p.summary.toLowerCase().includes(q) ||
+        p.bigIdea.toLowerCase().includes(q) ||
         p.body.toLowerCase().includes(q)
     )
     .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
