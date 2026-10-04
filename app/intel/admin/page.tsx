@@ -3,7 +3,15 @@
 import { useEffect, useState } from "react";
 import { api, useMeta, IntelNav, PostEditor, fmtDate, type Post, type Meta, type Category, type Portfolio } from "../shared";
 
-type Tab = "posts" | "categories" | "tickers" | "portfolios";
+type Tab = "posts" | "categories" | "dataTypes" | "tickers" | "portfolios";
+
+const TAB_LABEL: Record<Tab, string> = {
+  posts: "Posts",
+  categories: "Categories",
+  dataTypes: "Shadow Data Types",
+  tickers: "Tickers",
+  portfolios: "Portfolios",
+};
 
 const input = "rounded-lg border border-border bg-surface px-3 py-1.5 text-sm outline-none focus:border-accent";
 const btn = "rounded-lg border border-border px-2.5 py-1 text-xs text-muted hover:text-foreground";
@@ -39,20 +47,21 @@ export default function IntelAdmin() {
       {(metaError || error) && (
         <div className="mb-4 rounded-lg border border-bear/40 bg-bear/10 px-4 py-3 text-sm text-bear">{metaError || error}</div>
       )}
-      <div className="mb-5 flex gap-1 border-b border-border">
-        {(["posts", "categories", "tickers", "portfolios"] as Tab[]).map((t) => (
+      <div className="mb-5 flex gap-1 overflow-x-auto border-b border-border">
+        {(Object.keys(TAB_LABEL) as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm capitalize ${tab === t ? "border-accent text-accent" : "border-transparent text-muted hover:text-foreground"}`}
+            className={`-mb-px whitespace-nowrap border-b-2 px-4 py-2 text-sm ${tab === t ? "border-accent text-accent" : "border-transparent text-muted hover:text-foreground"}`}
           >
-            {t}
+            {TAB_LABEL[t]}
           </button>
         ))}
       </div>
       {!meta && <p className="text-sm text-muted">Loading…</p>}
       {meta && tab === "posts" && <PostsTab meta={meta} run={run} onError={setError} />}
-      {meta && tab === "categories" && <CategoriesTab categories={meta.categories} run={run} />}
+      {meta && tab === "categories" && <CategoriesTab key="categories" kind="categories" terms={meta.categories} run={run} />}
+      {meta && tab === "dataTypes" && <CategoriesTab key="dataTypes" kind="dataTypes" terms={meta.dataTypes} run={run} />}
       {meta && tab === "tickers" && <TickersTab meta={meta} run={run} />}
       {meta && tab === "portfolios" && <PortfoliosTab portfolios={meta.portfolios} run={run} />}
     </main>
@@ -81,6 +90,7 @@ function PostsTab({ meta, run, onError }: { meta: Meta; run: Run; onError: (e: s
   }, []);
 
   const catName = (id: string) => meta.categories.find((c) => c.id === id)?.name;
+  const typeName = (id: string) => meta.dataTypes.find((c) => c.id === id)?.name;
 
   return (
     <section>
@@ -101,6 +111,7 @@ function PostsTab({ meta, run, onError }: { meta: Meta; run: Run; onError: (e: s
               <th className="px-3 py-2">Post</th>
               <th className="px-3 py-2">Tickers</th>
               <th className="px-3 py-2">Categories</th>
+              <th className="px-3 py-2">Data types</th>
               <th className="px-3 py-2">Published</th>
               <th className="px-3 py-2" />
             </tr>
@@ -117,6 +128,7 @@ function PostsTab({ meta, run, onError }: { meta: Meta; run: Run; onError: (e: s
                 </td>
                 <td className="px-3 py-2 text-xs text-accent">{p.tickers.join(", ")}</td>
                 <td className="px-3 py-2 text-xs text-muted">{p.categoryIds.map(catName).filter(Boolean).join(", ")}</td>
+                <td className="px-3 py-2 text-xs text-muted">{(p.dataTypeIds ?? []).map(typeName).filter(Boolean).join(", ")}</td>
                 <td className="whitespace-nowrap px-3 py-2 text-xs text-muted">{fmtDate(p.publishedAt)}</td>
                 <td className="whitespace-nowrap px-3 py-2 text-right">
                   <div className="flex justify-end gap-1">
@@ -146,7 +158,7 @@ function PostsTab({ meta, run, onError }: { meta: Meta; run: Run; onError: (e: s
             ))}
             {posts.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-sm text-muted">No posts.</td>
+                <td colSpan={6} className="px-3 py-8 text-center text-sm text-muted">No posts.</td>
               </tr>
             )}
           </tbody>
@@ -156,6 +168,7 @@ function PostsTab({ meta, run, onError }: { meta: Meta; run: Run; onError: (e: s
         <PostEditor
           post={editing === "new" ? null : editing}
           categories={meta.categories}
+          dataTypes={meta.dataTypes}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
@@ -167,19 +180,32 @@ function PostsTab({ meta, run, onError }: { meta: Meta; run: Run; onError: (e: s
   );
 }
 
-function CategoriesTab({ categories, run }: { categories: Category[]; run: Run }) {
+const TERM = {
+  categories: { api: "/api/intel/categories", one: "category", placeholder: "Category name", empty: "No categories yet. GrokBot creates them as it posts, or add one above." },
+  dataTypes: { api: "/api/intel/data-types", one: "data type", placeholder: "Shadow Data Type name", empty: "No Shadow Data Types yet. GrokBot creates them as it posts, or add one above." },
+} as const;
+
+type Kind = keyof typeof TERM;
+
+function CategoriesTab({ kind, terms, run }: { kind: Kind; terms: Category[]; run: Run }) {
+  const t = TERM[kind];
   const [name, setName] = useState("");
   const [color, setColor] = useState("#6366f1");
   return (
     <section className="max-w-2xl">
+      {kind === "dataTypes" && (
+        <p className="mb-3 text-xs text-muted">
+          The kind of alternative data a post is built on (hiring data, satellite imagery, patents, web traffic…). Admins and GrokBot can add new ones; only admins can rename, merge or delete.
+        </p>
+      )}
       <div className="mb-4 flex gap-2">
-        <input className={`${input} flex-1`} placeholder="Category name" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} />
+        <input className={`${input} flex-1`} placeholder={t.placeholder} value={name} maxLength={60} onChange={(e) => setName(e.target.value)} />
         <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-9 w-10 cursor-pointer rounded border border-border bg-surface" />
         <button
           className="rounded-lg bg-accent px-3 text-sm text-white disabled:opacity-50"
           disabled={!name.trim()}
           onClick={() => run(async () => {
-            await api("/api/intel/categories", { method: "POST", json: { name, color } });
+            await api(t.api, { method: "POST", json: { name, color } });
             setName("");
           })}
         >
@@ -187,16 +213,17 @@ function CategoriesTab({ categories, run }: { categories: Category[]; run: Run }
         </button>
       </div>
       <div className="space-y-2">
-        {categories.map((c) => (
-          <CategoryRow key={`${c.id}:${c.name}`} cat={c} others={categories.filter((x) => x.id !== c.id)} run={run} />
+        {terms.map((c) => (
+          <CategoryRow key={`${c.id}:${c.name}`} kind={kind} cat={c} others={terms.filter((x) => x.id !== c.id)} run={run} />
         ))}
-        {categories.length === 0 && <p className="text-sm text-muted">No categories yet. GrokBot creates them as it posts, or add one above.</p>}
+        {terms.length === 0 && <p className="text-sm text-muted">{t.empty}</p>}
       </div>
     </section>
   );
 }
 
-function CategoryRow({ cat, others, run }: { cat: Category; others: Category[]; run: Run }) {
+function CategoryRow({ kind, cat, others, run }: { kind: Kind; cat: Category; others: Category[]; run: Run }) {
+  const t = TERM[kind];
   const [name, setName] = useState(cat.name);
   const [mergeInto, setMergeInto] = useState("");
   return (
@@ -204,13 +231,13 @@ function CategoryRow({ cat, others, run }: { cat: Category; others: Category[]; 
       <input
         type="color"
         value={cat.color}
-        onChange={(e) => run(() => api(`/api/intel/categories/${cat.id}`, { method: "PATCH", json: { color: e.target.value } }))}
+        onChange={(e) => run(() => api(`${t.api}/${cat.id}`, { method: "PATCH", json: { color: e.target.value } }))}
         className="h-8 w-9 cursor-pointer rounded border border-border bg-surface"
       />
       <input className={`${input} flex-1`} value={name} maxLength={60} onChange={(e) => setName(e.target.value)} />
       <span className="text-xs text-muted">{cat.postCount} posts</span>
       {name.trim() && name !== cat.name && (
-        <button className={btn} onClick={() => run(() => api(`/api/intel/categories/${cat.id}`, { method: "PATCH", json: { name } }))}>
+        <button className={btn} onClick={() => run(() => api(`${t.api}/${cat.id}`, { method: "PATCH", json: { name } }))}>
           Save
         </button>
       )}
@@ -226,9 +253,8 @@ function CategoryRow({ cat, others, run }: { cat: Category; others: Category[]; 
           const target = others.find((o) => o.id === mergeInto);
           const msg = target
             ? `Merge "${cat.name}" into "${target.name}"? Its ${cat.postCount} posts move over.`
-            : `Delete "${cat.name}"? Its ${cat.postCount} posts lose this category.`;
-          if (confirm(msg))
-            run(() => api(`/api/intel/categories/${cat.id}${mergeInto ? `?mergeInto=${mergeInto}` : ""}`, { method: "DELETE" }));
+            : `Delete the ${t.one} "${cat.name}"? Its ${cat.postCount} posts lose this tag.`;
+          if (confirm(msg)) run(() => api(`${t.api}/${cat.id}${mergeInto ? `?mergeInto=${mergeInto}` : ""}`, { method: "DELETE" }));
         }}
       >
         {mergeInto ? "Merge" : "Delete"}

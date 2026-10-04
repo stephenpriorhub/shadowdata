@@ -1,10 +1,10 @@
 /**
  * Access rules for the Intelligence Feed:
  *  - GrokBot authenticates with `Authorization: Bearer <INTEL_FEED_API_KEY>`. The key can
- *    create/edit posts and read the feed — nothing else. It is a dedicated key so the bot
- *    never holds HUB_API_TOKEN (which is an admin identity across the app).
- *  - Hub admins (super_admin / exec_admin / admin) curate: edit/delete posts, tickers,
- *    categories, portfolios.
+ *    read the feed, create/edit posts, and ADD categories, Shadow Data Types, tickers and
+ *    portfolios — never rename/merge/delete them, delete posts, or touch folders. It is a
+ *    dedicated key so the bot never holds HUB_API_TOKEN (an admin identity across the app).
+ *  - Hub admins (super_admin / exec_admin / admin) curate everything.
  *  - Any signed-in hub user reads the feed and keeps their own saved folders.
  */
 import crypto from "crypto";
@@ -38,7 +38,7 @@ export async function requireReader(req: NextRequest): Promise<Gate<IntelActor>>
   return { actor: { kind: "user", user: gate.user } };
 }
 
-/** Bot key or a hub admin — who may create and edit posts. */
+/** Bot key or a hub admin — who may create/edit posts and add new taxonomy entries. */
 export async function requireAuthor(req: NextRequest): Promise<Gate<IntelActor>> {
   const gate = await requireReader(req);
   if ("response" in gate) return gate;

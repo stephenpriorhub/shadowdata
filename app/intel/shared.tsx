@@ -12,6 +12,7 @@ export type Post = IntelPost;
 
 export interface Meta {
   categories: Category[];
+  dataTypes: Category[];
   tickers: Ticker[];
   portfolios: Portfolio[];
   isAdmin: boolean;
@@ -114,9 +115,11 @@ function Linkified({ text }: { text: string }) {
 export function PostCard({
   post,
   categories,
+  dataTypes = [],
   folders,
   onTicker,
   onCategory,
+  onDataType,
   onSaveToggle,
   onCreateFolder,
   onEdit,
@@ -125,9 +128,11 @@ export function PostCard({
 }: {
   post: Post;
   categories: Category[];
+  dataTypes?: Category[];
   folders?: Folder[];
   onTicker?: (t: string) => void;
   onCategory?: (id: string) => void;
+  onDataType?: (id: string) => void;
   onSaveToggle?: (folderId: string, saved: boolean) => void;
   onCreateFolder?: (name: string) => Promise<Folder | null>;
   onEdit?: () => void;
@@ -136,6 +141,7 @@ export function PostCard({
 }) {
   const [open, setOpen] = useState(false);
   const cats = post.categoryIds.map((id) => categories.find((c) => c.id === id)).filter((c): c is Category => !!c);
+  const types = (post.dataTypeIds ?? []).map((id) => dataTypes.find((c) => c.id === id)).filter((c): c is Category => !!c);
   const savedIn = (folders ?? []).filter((f) => f.postIds.includes(post.id));
   return (
     <article className={`rounded-xl border bg-surface p-4 ${post.hidden ? "border-neutral/40 opacity-70" : "border-border"}`}>
@@ -152,6 +158,17 @@ export function PostCard({
             style={{ background: `${c.color}26`, color: c.color }}
           >
             {c.name}
+          </button>
+        ))}
+        {types.map((c) => (
+          <button
+            key={c.id}
+            onClick={() => onDataType?.(c.id)}
+            className="rounded-full border px-2 py-0.5 text-[10px] font-medium"
+            style={{ borderColor: c.color, color: c.color }}
+            title="Shadow Data Type"
+          >
+            🛰️ {c.name}
           </button>
         ))}
       </div>
@@ -292,11 +309,13 @@ function SaveMenu({
 export function PostEditor({
   post,
   categories,
+  dataTypes,
   onClose,
   onSaved,
 }: {
   post: Post | null;
   categories: Category[];
+  dataTypes: Category[];
   onClose: () => void;
   onSaved: (p: Post) => void;
 }) {
@@ -309,6 +328,8 @@ export function PostEditor({
     tickers: post?.tickers.join(", ") ?? "",
     categoryIds: post?.categoryIds ?? [],
     newCategory: "",
+    dataTypeIds: post?.dataTypeIds ?? [],
+    newDataType: "",
     hidden: post?.hidden ?? false,
   });
   const [busy, setBusy] = useState(false);
@@ -326,6 +347,7 @@ export function PostEditor({
       sourceName: f.sourceName,
       tickers: f.tickers,
       categories: [...f.categoryIds, ...(f.newCategory.trim() ? [f.newCategory.trim()] : [])],
+      dataTypes: [...f.dataTypeIds, ...(f.newDataType.trim() ? [f.newDataType.trim()] : [])],
       hidden: f.hidden,
     };
     try {
@@ -374,29 +396,24 @@ export function PostEditor({
             <input className={input} value={f.tickers} onChange={(e) => set("tickers", e.target.value.toUpperCase())} />
           </Field>
           <Field label="Categories">
-            <div className="flex flex-wrap gap-1.5">
-              {categories.map((c) => {
-                const on = f.categoryIds.includes(c.id);
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => set("categoryIds", on ? f.categoryIds.filter((x) => x !== c.id) : [...f.categoryIds, c.id])}
-                    className="rounded-full border px-2.5 py-0.5 text-xs"
-                    style={on ? { background: `${c.color}26`, color: c.color, borderColor: c.color } : undefined}
-                  >
-                    {c.name}
-                  </button>
-                );
-              })}
-              <input
-                className="rounded-full border border-border bg-surface px-2.5 py-0.5 text-xs outline-none focus:border-accent"
-                placeholder="+ new category"
-                value={f.newCategory}
-                onChange={(e) => set("newCategory", e.target.value)}
-                maxLength={60}
-              />
-            </div>
+            <TagPicker
+              terms={categories}
+              selected={f.categoryIds}
+              onChange={(ids) => set("categoryIds", ids)}
+              newValue={f.newCategory}
+              onNew={(v) => set("newCategory", v)}
+              placeholder="+ new category"
+            />
+          </Field>
+          <Field label="Shadow Data Type">
+            <TagPicker
+              terms={dataTypes}
+              selected={f.dataTypeIds}
+              onChange={(ids) => set("dataTypeIds", ids)}
+              newValue={f.newDataType}
+              onNew={(v) => set("newDataType", v)}
+              placeholder="+ new data type"
+            />
           </Field>
           <label className="flex items-center gap-2 text-sm text-muted">
             <input type="checkbox" checked={f.hidden} onChange={(e) => set("hidden", e.target.checked)} />
@@ -422,6 +439,48 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div>
       <span className="mb-1 block text-xs font-medium text-muted">{label}</span>
       {children}
+    </div>
+  );
+}
+
+function TagPicker({
+  terms,
+  selected,
+  onChange,
+  newValue,
+  onNew,
+  placeholder,
+}: {
+  terms: Category[];
+  selected: string[];
+  onChange: (ids: string[]) => void;
+  newValue: string;
+  onNew: (v: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {terms.map((c) => {
+        const on = selected.includes(c.id);
+        return (
+          <button
+            key={c.id}
+            type="button"
+            onClick={() => onChange(on ? selected.filter((x) => x !== c.id) : [...selected, c.id])}
+            className="rounded-full border px-2.5 py-0.5 text-xs"
+            style={on ? { background: `${c.color}26`, color: c.color, borderColor: c.color } : undefined}
+          >
+            {c.name}
+          </button>
+        );
+      })}
+      <input
+        className="rounded-full border border-border bg-surface px-2.5 py-0.5 text-xs outline-none focus:border-accent"
+        placeholder={placeholder}
+        value={newValue}
+        onChange={(e) => onNew(e.target.value)}
+        maxLength={60}
+      />
     </div>
   );
 }

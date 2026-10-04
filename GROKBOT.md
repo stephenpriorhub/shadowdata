@@ -24,7 +24,9 @@ they check it.
    - `portfolios`: named ticker groups the team cares about. **These are your priority
      list.** Every ticker in a portfolio is one you should be watching.
    - `tickers`: every ticker already in the feed, some with company names.
-   - `categories`: the category names in use. **Reuse these exact names.**
+   - `categories`: topic tags in use (what the news is about). **Reuse these exact names.**
+   - `dataTypes`: **Shadow Data Types** in use (what kind of alternative data the post is
+     built on). **Reuse these exact names.**
 2. **Hunt for intelligence** on those tickers first (see §3). Once they're covered,
    add notable items on other US-listed companies.
 3. **Check you haven't posted it already.** Search the feed with
@@ -32,7 +34,11 @@ they check it.
    duplicates (same `sourceUrl` or `externalId`). Don't re-post the same story from a
    different outlet unless it adds something new.
 4. **Write and publish** (see §4 and §6). Batch a run's posts into one request when you can.
-5. **Fix your own mistakes.** If you find a post of yours is wrong, correct it with
+5. **Grow the setup when it helps.** You may add tickers, categories, Shadow Data
+   Types and new portfolios (see §6) when there's a real gap: a recurring theme with no
+   portfolio, or a data source with no type yet. Check `meta` first so you never add a
+   near-duplicate ("Hiring" vs "Hiring Data"). Only admins can rename, merge or delete.
+6. **Fix your own mistakes.** If you find a post of yours is wrong, correct it with
    `PATCH`. You can't delete posts. If one should come down, set `"hidden": true` and
    say why in the body.
 
@@ -75,9 +81,16 @@ anything paywalled you couldn't actually read, and recycled week-old news.
 - **sourceName:** the outlet or site, e.g. "SEC EDGAR", "Reuters", "LinkedIn Jobs".
 - **tickers:** every US-listed company the post is materially about, and only those.
   Don't tag a ticker that's just mentioned in passing.
-- **categories:** 1–2 names. Reuse the names from `meta`. If none exist yet, use
-  these: `Hiring`, `Supply Chain`, `Regulatory`, `Filings`, `Insider Activity`,
-  `Product & Tech`, `Deals`, `Demand Signals`, `Sentiment`, `Macro`.
+- **categories** (the topic): 1–2 names. Reuse the names from `meta`. If none exist yet,
+  start with: `Earnings`, `Regulatory`, `Deals & Contracts`, `Insider Activity`,
+  `Product Launch`, `Management`, `Litigation`, `Macro`.
+- **dataTypes** (Shadow Data Type: *how* we know): 1–2 names. This is the alternative-data
+  source behind the post. Reuse the names from `meta`. If none exist yet, start with:
+  `Hiring Data`, `Supply Chain & Trade`, `Web Traffic`, `App Data`, `Search Trends`,
+  `Patents`, `SEC Filings`, `Satellite Imagery`, `Foot Traffic`, `Social Sentiment`,
+  `Options Flow`, `Open Source / GitHub`, `Government Records`.
+  Example: a post about Micron adding factory lines found in city permits has category
+  `Product Launch` and data type `Government Records`.
 - **externalId:** a stable id you can regenerate for the same item, e.g.
   `grok:<source-domain>:<article-or-filing-id>`.
 - **publishedAt:** when the **source** published it (ISO 8601, UTC), not when you found it.
@@ -110,9 +123,14 @@ ShadowData Railway service):
 Authorization: Bearer <INTEL_FEED_API_KEY>
 ```
 
-The key can **create posts, edit posts and read the feed**, nothing else.
-Deleting posts and managing categories, tickers, portfolios or folders is for the
-human admins at `/intel/admin`. Those calls return `401` for you.
+The key can:
+- read the feed
+- create and edit posts
+- **add** new categories, Shadow Data Types, tickers and portfolios
+
+It **cannot** delete posts, rename/merge/delete any category, data type, ticker or
+portfolio, edit an existing portfolio, or touch anyone's saved folders. Those are for
+the human admins at `/intel/admin`, and those calls return `401` for you.
 
 ### Create posts — `POST /api/intel/posts`
 Send one post object, `{ "posts": [ ... ] }`, or a bare array. **Max 50 per request.**
@@ -128,7 +146,8 @@ Send one post object, `{ "posts": [ ... ] }`, or a bare array. **Max 50 per requ
       "sourceName": "Publisher or site name",
       "imageUrl": "https://... (optional)",
       "tickers": ["NVDA", "TSM"],
-      "categories": ["Supply Chain"],
+      "categories": ["Product Launch"],
+      "dataTypes": ["Government Records"],
       "externalId": "grok:example.com:12345",
       "publishedAt": "2026-10-04T13:30:00Z"
     }
@@ -145,22 +164,36 @@ which is fine. `"missing title"` means you sent a bad item.
 ```
 
 Field handling: tickers are uppercased, a leading `$` is stripped and invalid symbols
-are dropped (max 25). An unknown category name creates a new category, so match the
-existing names exactly. `publishedAt` defaults to now. The feed sorts by
+are dropped (max 25). An unknown category or data-type name creates a new one, so match
+the existing names exactly. `publishedAt` defaults to now. The feed sorts by
 `publishedAt`, newest first.
 
 ### Edit a post — `PATCH /api/intel/posts/:id`
 Send only the fields that change. `tickers` and `categories` **replace** the existing
-lists. To retract a post: `{ "hidden": true, "body": "Retracted: <reason>. <original body>" }`.
+lists, and so does `dataTypes`. To retract a post: `{ "hidden": true, "body": "Retracted: <reason>. <original body>" }`.
+
+### Add taxonomy (no edits or deletes)
+- `POST /api/intel/categories` `{ "name": "Litigation", "color": "#ef4444" }` → `{ category }`
+- `POST /api/intel/data-types` `{ "name": "Satellite Imagery" }` → `{ dataType }`
+- `POST /api/intel/tickers` `{ "symbol": "MU", "name": "Micron Technology" }` → `{ ticker }`.
+  If the ticker exists, sending a `name` updates its display name. Leave `name` out to
+  keep the current one. Tickers are also added automatically when you tag a post.
+- `POST /api/intel/portfolios` `{ "name": "HBM Memory Supply Chain", "tickers": ["MU", "AMAT", "LRCX"] }`
+  → `{ portfolio }`. `409` if a portfolio with that name exists, which means it's
+  already there. You can't change a portfolio after creating it, so get the ticker list
+  right first.
+
+`color` is optional (`#rrggbb`). A duplicate name returns `409`, which means it already
+exists. That's fine: use the existing one.
 
 ### Read
-- `GET /api/intel/meta` → `{ categories, tickers, portfolios }`
-- `GET /api/intel/posts?ticker=NVDA,AMD&portfolio=<id>&category=<id>&q=<text>&limit=30&offset=0` → `{ posts, total }`
+- `GET /api/intel/meta` → `{ categories, dataTypes, tickers, portfolios }`
+- `GET /api/intel/posts?ticker=NVDA,AMD&portfolio=<id>&category=<id>&dataType=<id>&q=<text>&limit=30&offset=0` → `{ posts, total }`
 - `GET /api/intel/posts/:id` → `{ post }`
 
 ### Errors
 `400` bad input · `401` missing/wrong key, or an action your key isn't allowed ·
-`404` not found · `500` server problem (wait and retry once; don't hammer).
+`404` not found · `409` already exists · `500` server problem (wait and retry once; don't hammer).
 Error bodies look like `{ "error": "message" }`.
 
 ### Example
@@ -174,7 +207,8 @@ curl -X POST https://shadowdata.oxfordhub.app/api/intel/posts \
     "sourceUrl": "https://example.gov.tw/permits/2026-1234",
     "sourceName": "Taichung City permit registry",
     "tickers": ["MU"],
-    "categories": ["Supply Chain"],
+    "categories": ["Product Launch"],
+    "dataTypes": ["Government Records"],
     "externalId": "grok:example.gov.tw:2026-1234",
     "publishedAt": "2026-10-03T08:00:00Z"
   }'
@@ -187,5 +221,5 @@ curl -X POST https://shadowdata.oxfordhub.app/api/intel/posts \
 - [ ] I read the source myself, and `sourceUrl` points to the original
 - [ ] Every fact and ticker is in the source; rumours are labelled
 - [ ] No price targets, no buy/sell language
-- [ ] Category names match the existing ones
+- [ ] Category and Shadow Data Type names match the existing ones
 - [ ] `externalId` set, `publishedAt` = when the source published

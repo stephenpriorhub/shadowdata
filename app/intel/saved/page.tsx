@@ -150,6 +150,8 @@ export default function SavedFolders() {
                     key={p.id}
                     post={p}
                     categories={meta?.categories ?? []}
+                    dataTypes={meta?.dataTypes ?? []}
+                    onDataType={(id) => (window.location.href = `/intel?dataType=${id}`)}
                     onTicker={(t) => (window.location.href = `/intel?ticker=${t}`)}
                     onCategory={(id) => (window.location.href = `/intel?category=${id}`)}
                     extraAction={

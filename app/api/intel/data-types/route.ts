@@ -10,5 +10,5 @@ export async function POST(req: NextRequest) {
   const gate = await requireAuthor(req);
   if ("response" in gate) return gate.response;
   const b = await jsonBody(req);
-  return handle(() => ({ category: createTerm("categories", b.name, b.color) }), 201);
+  return handle(() => ({ dataType: createTerm("dataTypes", b.name, b.color) }), 201);
 }

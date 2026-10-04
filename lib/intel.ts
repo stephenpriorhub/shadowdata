@@ -23,6 +23,8 @@ export interface IntelPost {
   imageUrl: string | null;
   tickers: string[];
   categoryIds: string[];
+  /** Shadow Data Type tags — which kind of alternative data the post is built on. */
+  dataTypeIds: string[];
   author: string;
   /** Caller-supplied id used to dedupe re-posts of the same item. */
   externalId: string | null;
@@ -60,6 +62,7 @@ export interface IntelFolder {
 interface Store {
   posts: IntelPost[];
   categories: IntelCategory[];
+  dataTypes: IntelCategory[];
   tickers: IntelTicker[];
   portfolios: IntelPortfolio[];
   folders: IntelFolder[];
@@ -71,14 +74,16 @@ export class IntelError extends Error {
   }
 }
 
-const EMPTY: Store = { posts: [], categories: [], tickers: [], portfolios: [], folders: [] };
+const EMPTY: Store = { posts: [], categories: [], dataTypes: [], tickers: [], portfolios: [], folders: [] };
 const PALETTE = ["#6366f1", "#22c55e", "#eab308", "#ef4444", "#06b6d4", "#a855f7", "#f97316", "#ec4899"];
 const TICKER_RE = /^[A-Z][A-Z0-9.\-]{0,9}$/;
 
 function read(): Store {
   if (!fs.existsSync(FILE)) return structuredClone(EMPTY);
   try {
-    return { ...structuredClone(EMPTY), ...(JSON.parse(fs.readFileSync(FILE, "utf-8")) as Partial<Store>) };
+    const s = { ...structuredClone(EMPTY), ...(JSON.parse(fs.readFileSync(FILE, "utf-8")) as Partial<Store>) };
+    for (const p of s.posts) p.dataTypeIds ??= []; // posts created before Shadow Data Types existed
+    return s;
   } catch {
     // Never silently start from empty over a corrupt file — that would wipe the feed on next write.
     throw new IntelError("Intelligence store is unreadable; refusing to overwrite it.", 500);
@@ -132,17 +137,22 @@ function registerTickers(s: Store, tickers: string[]) {
   s.tickers.sort((a, b) => a.symbol.localeCompare(b.symbol));
 }
 
-/** Map category names/ids to ids, creating any unknown name (admins can merge/delete later). */
-function resolveCategories(s: Store, v: unknown): string[] {
+/** The two tag taxonomies on a post: categories (topic) and Shadow Data Types (signal source). */
+export type TaxonomyKind = "categories" | "dataTypes";
+const POST_FIELD = { categories: "categoryIds", dataTypes: "dataTypeIds" } as const;
+const LABEL = { categories: "category", dataTypes: "data type" } as const;
+
+/** Map tag names/ids to ids, creating any unknown name (admins can merge/delete later). */
+function resolveTerms(s: Store, kind: TaxonomyKind, v: unknown): string[] {
   const arr = Array.isArray(v) ? v : typeof v === "string" ? [v] : [];
   const ids: string[] = [];
   for (const raw of arr) {
     const name = str(raw, 60);
     if (!name) continue;
-    let cat = s.categories.find((c) => c.id === name || c.name.toLowerCase() === name.toLowerCase());
+    let cat = s[kind].find((c) => c.id === name || c.name.toLowerCase() === name.toLowerCase());
     if (!cat) {
-      cat = { id: newId(), name, color: PALETTE[s.categories.length % PALETTE.length] };
-      s.categories.push(cat);
+      cat = { id: newId(), name, color: PALETTE[s[kind].length % PALETTE.length] };
+      s[kind].push(cat);
     }
     if (!ids.includes(cat.id)) ids.push(cat.id);
   }
@@ -160,6 +170,7 @@ export interface PostInput {
   imageUrl?: unknown;
   tickers?: unknown;
   categories?: unknown;
+  dataTypes?: unknown;
   externalId?: unknown;
   publishedAt?: unknown;
   hidden?: unknown;
@@ -207,7 +218,8 @@ export function createPosts(inputs: PostInput[], author: string) {
         sourceName: str(input.sourceName, 120) || null,
         imageUrl: safeUrl(input.imageUrl),
         tickers,
-        categoryIds: resolveCategories(s, input.categories),
+        categoryIds: resolveTerms(s, "categories", input.categories),
+        dataTypeIds: resolveTerms(s, "dataTypes", input.dataTypes),
         author: author.slice(0, 80),
         externalId,
         publishedAt: parseDate(input.publishedAt) ?? now,
@@ -240,7 +252,8 @@ export function updatePost(id: string, input: PostInput): IntelPost {
       p.tickers = normTickers(input.tickers);
       registerTickers(s, p.tickers);
     }
-    if (input.categories !== undefined) p.categoryIds = resolveCategories(s, input.categories);
+    if (input.categories !== undefined) p.categoryIds = resolveTerms(s, "categories", input.categories);
+    if (input.dataTypes !== undefined) p.dataTypeIds = resolveTerms(s, "dataTypes", input.dataTypes);
     if (input.publishedAt !== undefined) p.publishedAt = parseDate(input.publishedAt) ?? p.publishedAt;
     if (input.hidden !== undefined) p.hidden = input.hidden === true;
     p.updatedAt = new Date().toISOString();
@@ -265,6 +278,7 @@ export interface FeedQuery {
   tickers?: string[];
   portfolioId?: string | null;
   categoryId?: string | null;
+  dataTypeId?: string | null;
   q?: string | null;
   includeHidden?: boolean;
   limit?: number;
@@ -286,6 +300,7 @@ export function listPosts(query: FeedQuery) {
     .filter((p) => query.includeHidden || !p.hidden)
     .filter((p) => filterTickers.size === 0 || p.tickers.some((t) => filterTickers.has(t)))
     .filter((p) => !query.categoryId || p.categoryIds.includes(query.categoryId))
+    .filter((p) => !query.dataTypeId || p.dataTypeIds.includes(query.dataTypeId))
     .filter(
       (p) =>
         !q ||
@@ -299,29 +314,30 @@ export function listPosts(query: FeedQuery) {
   return { posts: matched.slice(offset, offset + limit), total: matched.length };
 }
 
-// ── Taxonomy: categories, tickers, portfolios ─────────────────────────────────
+// ── Taxonomy: categories, data types, tickers, portfolios ─────────────────────────────────
 
 export function getMeta() {
   const s = read();
   const counts: Record<string, number> = {};
   for (const p of s.posts) for (const t of p.tickers) counts[t] = (counts[t] ?? 0) + 1;
   const catCounts: Record<string, number> = {};
-  for (const p of s.posts) for (const c of p.categoryIds) catCounts[c] = (catCounts[c] ?? 0) + 1;
+  for (const p of s.posts) for (const c of [...p.categoryIds, ...p.dataTypeIds]) catCounts[c] = (catCounts[c] ?? 0) + 1;
   return {
     categories: s.categories.map((c) => ({ ...c, postCount: catCounts[c.id] ?? 0 })),
+    dataTypes: s.dataTypes.map((c) => ({ ...c, postCount: catCounts[c.id] ?? 0 })),
     tickers: s.tickers.map((t) => ({ ...t, postCount: counts[t.symbol] ?? 0 })),
     portfolios: s.portfolios,
   };
 }
 
-export function createCategory(name: unknown, color?: unknown): IntelCategory {
+export function createTerm(kind: TaxonomyKind, name: unknown, color?: unknown): IntelCategory {
   return mutate((s) => {
     const n = str(name, 60);
     if (!n) throw new IntelError("Name required.");
-    if (s.categories.some((c) => c.name.toLowerCase() === n.toLowerCase()))
-      throw new IntelError("A category with that name already exists.", 409);
-    const c = { id: newId(), name: n, color: hexOr(color, PALETTE[s.categories.length % PALETTE.length]) };
-    s.categories.push(c);
+    if (s[kind].some((c) => c.name.toLowerCase() === n.toLowerCase()))
+      throw new IntelError(`A ${LABEL[kind]} with that name already exists.`, 409);
+    const c = { id: newId(), name: n, color: hexOr(color, PALETTE[s[kind].length % PALETTE.length]) };
+    s[kind].push(c);
     return c;
   });
 }
@@ -331,15 +347,15 @@ function hexOr(v: unknown, fallback: string): string {
   return /^#[0-9a-fA-F]{6}$/.test(s) ? s : fallback;
 }
 
-export function updateCategory(id: string, input: { name?: unknown; color?: unknown }): IntelCategory {
+export function updateTerm(kind: TaxonomyKind, id: string, input: { name?: unknown; color?: unknown }): IntelCategory {
   return mutate((s) => {
-    const c = s.categories.find((x) => x.id === id);
-    if (!c) throw new IntelError("Category not found.", 404);
+    const c = s[kind].find((x) => x.id === id);
+    if (!c) throw new IntelError(`That ${LABEL[kind]} was not found.`, 404);
     if (input.name !== undefined) {
       const n = str(input.name, 60);
       if (!n) throw new IntelError("Name required.");
-      if (s.categories.some((x) => x.id !== id && x.name.toLowerCase() === n.toLowerCase()))
-        throw new IntelError("A category with that name already exists.", 409);
+      if (s[kind].some((x) => x.id !== id && x.name.toLowerCase() === n.toLowerCase()))
+        throw new IntelError(`A ${LABEL[kind]} with that name already exists.`, 409);
       c.name = n;
     }
     if (input.color !== undefined) c.color = hexOr(input.color, c.color);
@@ -347,17 +363,18 @@ export function updateCategory(id: string, input: { name?: unknown; color?: unkn
   });
 }
 
-/** Delete a category; optionally move its posts into another category first. */
-export function deleteCategory(id: string, mergeInto?: string | null): void {
+/** Delete a tag; optionally move its posts onto another tag of the same kind first. */
+export function deleteTerm(kind: TaxonomyKind, id: string, mergeInto?: string | null): void {
   mutate((s) => {
-    if (!s.categories.some((c) => c.id === id)) throw new IntelError("Category not found.", 404);
-    if (mergeInto && !s.categories.some((c) => c.id === mergeInto)) throw new IntelError("Merge target not found.", 404);
+    const field = POST_FIELD[kind];
+    if (!s[kind].some((c) => c.id === id)) throw new IntelError(`That ${LABEL[kind]} was not found.`, 404);
+    if (mergeInto && !s[kind].some((c) => c.id === mergeInto)) throw new IntelError("Merge target not found.", 404);
     for (const p of s.posts) {
-      if (!p.categoryIds.includes(id)) continue;
-      p.categoryIds = p.categoryIds.filter((x) => x !== id);
-      if (mergeInto && !p.categoryIds.includes(mergeInto)) p.categoryIds.push(mergeInto);
+      if (!p[field].includes(id)) continue;
+      p[field] = p[field].filter((x) => x !== id);
+      if (mergeInto && !p[field].includes(mergeInto)) p[field].push(mergeInto);
     }
-    s.categories = s.categories.filter((c) => c.id !== id);
+    s[kind] = s[kind].filter((c) => c.id !== id);
   });
 }
 
@@ -371,7 +388,8 @@ export function upsertTicker(symbol: unknown, name: unknown): IntelTicker {
       s.tickers.push(row);
       s.tickers.sort((a, b) => a.symbol.localeCompare(b.symbol));
     }
-    row.name = str(name, 120) || null;
+    // Omitted name = keep the existing one (the bot re-adding a ticker must not wipe an admin's label).
+    if (name !== undefined) row.name = str(name, 120) || null;
     return row;
   });
 }
@@ -413,6 +431,8 @@ export function savePortfolio(id: string | null, input: { name?: unknown; ticker
     const tickers = normTickers(input.tickers);
     if (!id) {
       if (!name) throw new IntelError("Name required.");
+      const dup = s.portfolios.find((p) => p.name.toLowerCase() === name.toLowerCase());
+      if (dup) throw new IntelError(`A portfolio named "${dup.name}" already exists (id ${dup.id}).`, 409);
       const pf = { id: newId(), name, tickers };
       registerTickers(s, tickers);
       s.portfolios.push(pf);

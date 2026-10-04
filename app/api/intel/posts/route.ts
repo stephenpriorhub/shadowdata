@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/intel/posts?ticker=NVDA,AMD&portfolio=<id>&category=<id>&q=&limit=&offset=&hidden=1
+ * GET /api/intel/posts?ticker=NVDA,AMD&portfolio=<id>&category=<id>&dataType=<id>&q=&limit=&offset=&hidden=1
  * Newest first. `hidden=1` includes hidden posts (admins only).
  */
 export async function GET(req: NextRequest) {
@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
       tickers,
       portfolioId: sp.get("portfolio"),
       categoryId: sp.get("category"),
+      dataTypeId: sp.get("dataType"),
       q: sp.get("q"),
       includeHidden: canSeeHidden && sp.get("hidden") === "1",
       limit: Number(sp.get("limit")) || undefined,

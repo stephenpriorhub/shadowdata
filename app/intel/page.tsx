@@ -10,6 +10,7 @@ interface Filters {
   tickers: string[];
   portfolio: string;
   category: string;
+  dataType: string;
   q: string;
 }
 
@@ -19,6 +20,7 @@ function readUrl(): Filters {
     tickers: (sp.get("ticker") ?? "").split(",").map((t) => t.trim().toUpperCase()).filter(Boolean),
     portfolio: sp.get("portfolio") ?? "",
     category: sp.get("category") ?? "",
+    dataType: sp.get("dataType") ?? "",
     q: sp.get("q") ?? "",
   };
 }
@@ -28,6 +30,7 @@ function writeUrl(f: Filters) {
   if (f.tickers.length) sp.set("ticker", f.tickers.join(","));
   if (f.portfolio) sp.set("portfolio", f.portfolio);
   if (f.category) sp.set("category", f.category);
+  if (f.dataType) sp.set("dataType", f.dataType);
   if (f.q) sp.set("q", f.q);
   const qs = sp.toString();
   window.history.replaceState(null, "", qs ? `/intel?${qs}` : "/intel");
@@ -69,6 +72,7 @@ export default function IntelFeed() {
       if (tickers.length) sp.set("ticker", tickers.join(","));
       if (f.portfolio && !usingWatchlist) sp.set("portfolio", f.portfolio);
       if (f.category) sp.set("category", f.category);
+      if (f.dataType) sp.set("dataType", f.dataType);
       if (f.q) sp.set("q", f.q);
       if (meta?.isAdmin) sp.set("hidden", "1");
       setLoading(true);
@@ -133,7 +137,7 @@ export default function IntelFeed() {
     }
   };
 
-  const active = !!filters && (filters.tickers.length > 0 || !!filters.portfolio || !!filters.category || !!filters.q);
+  const active = !!filters && (filters.tickers.length > 0 || !!filters.portfolio || !!filters.category || !!filters.dataType || !!filters.q);
   const select = "rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-accent";
 
   return (
@@ -146,7 +150,7 @@ export default function IntelFeed() {
 
       {meta && filters && (
         <section className="mb-5 space-y-3 rounded-xl border border-border bg-surface p-4">
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             <select className={select} value={filters.portfolio} onChange={(e) => update({ portfolio: e.target.value })}>
               <option value="">All portfolios</option>
               <option value={WATCHLIST}>★ My watchlist ({watchlist.length})</option>
@@ -159,6 +163,14 @@ export default function IntelFeed() {
             <select className={select} value={filters.category} onChange={(e) => update({ category: e.target.value })}>
               <option value="">All categories</option>
               {meta.categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({c.postCount})
+                </option>
+              ))}
+            </select>
+            <select className={select} value={filters.dataType} onChange={(e) => update({ dataType: e.target.value })}>
+              <option value="">All data types</option>
+              {meta.dataTypes.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} ({c.postCount})
                 </option>
@@ -203,7 +215,7 @@ export default function IntelFeed() {
               <button
                 onClick={() => {
                   setQInput("");
-                  setFilters({ tickers: [], portfolio: "", category: "", q: "" });
+                  setFilters({ tickers: [], portfolio: "", category: "", dataType: "", q: "" });
                 }}
                 className="ml-auto text-xs text-muted hover:text-foreground"
               >
@@ -229,9 +241,11 @@ export default function IntelFeed() {
             key={p.id}
             post={p}
             categories={meta?.categories ?? []}
+            dataTypes={meta?.dataTypes ?? []}
             folders={folders}
             onTicker={(t) => filters && !filters.tickers.includes(t) && update({ tickers: [...filters.tickers, t] })}
             onCategory={(id) => update({ category: id })}
+            onDataType={(id) => update({ dataType: id })}
             onSaveToggle={(folderId, saved) => toggleSave(p.id, folderId, saved)}
             onCreateFolder={createFolder}
             onEdit={meta?.isAdmin ? () => setEditing(p) : undefined}
@@ -266,6 +280,7 @@ export default function IntelFeed() {
         <PostEditor
           post={editing === "new" ? null : editing}
           categories={meta.categories}
+          dataTypes={meta.dataTypes}
           onClose={() => setEditing(null)}
           onSaved={(saved) => {
             setPosts((ps) => (ps.some((x) => x.id === saved.id) ? ps.map((x) => (x.id === saved.id ? saved : x)) : [saved, ...ps]));
