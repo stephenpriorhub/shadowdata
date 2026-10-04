@@ -845,6 +845,24 @@ export default function Home() {
           )}
 
           <a
+            href="/intel"
+            className="group block rounded-xl border border-border bg-gradient-to-br from-accent/10 to-surface p-5 transition hover:border-accent/60"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className="text-3xl">📡</span>
+                <div>
+                  <h2 className="text-base font-semibold">Intelligence Feed</h2>
+                  <p className="mt-0.5 text-sm text-muted">
+                    Market intelligence gathered by GrokBot — filter by ticker or portfolio and save posts to folders.
+                  </p>
+                </div>
+              </div>
+              <span className="shrink-0 text-sm font-medium text-accent group-hover:translate-x-0.5">Open →</span>
+            </div>
+          </a>
+
+          <a
             href="/robotics"
             className="group block rounded-xl border border-border bg-gradient-to-br from-accent/10 to-surface p-5 transition hover:border-accent/60"
           >

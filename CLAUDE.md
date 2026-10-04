@@ -52,6 +52,18 @@ only, to stay defensible (Claims Integrity standard).
 land) · `POST /api/synthesize` · `GET /api/health`. All gated by `requireHubUser`
 (fails open on localhost, closed in prod).
 
+## Intelligence Feed (`/intel`)
+A small CMS that **GrokBot** (external xAI agent) posts market intelligence into.
+Store: `lib/intel.ts` → `DATA_DIR/intel.json` (posts, categories, tickers,
+portfolios, per-user saved folders; atomic tmp+rename writes). Access rules in
+`lib/intel-auth.ts`: GrokBot uses `Authorization: Bearer INTEL_FEED_API_KEY`
+(create/edit/read posts only — deliberately NOT `HUB_API_TOKEN`); hub admins
+(super_admin/exec_admin/admin) curate at `/intel/admin`; every hub user reads the
+feed and keeps their own folders at `/intel/saved`. A "portfolio" is an
+admin-defined named ticker group; "My watchlist" is the user's ShadowData
+watchlist. Dedup on `externalId`/`sourceUrl`. Bot contract: `docs/GROKBOT.md`.
+Posts render as plain text (never HTML) — keep it that way.
+
 ## Brain vault
 **v1 writes NOTHING to the brain** (decision 2026-07-09; trading/market apps need
 publisher sign-off per the 2026-07-01 rule). App-side snapshots accrue in
