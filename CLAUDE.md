@@ -61,7 +61,7 @@ portfolios, per-user saved folders; atomic tmp+rename writes). Access rules in
 (super_admin/exec_admin/admin) curate at `/intel/admin`; every hub user reads the
 feed and keeps their own folders at `/intel/saved`. A "portfolio" is an
 admin-defined named ticker group; "My watchlist" is the user's ShadowData
-watchlist. Dedup on `externalId`/`sourceUrl`. Bot contract: `docs/GROKBOT.md`.
+watchlist. Dedup on `externalId`/`sourceUrl`. Bot brief + API contract: `GROKBOT.md` (repo root).
 Posts render as plain text (never HTML) — keep it that way.
 
 ## Brain vault
