@@ -373,6 +373,43 @@ export function updateTerm(kind: TaxonomyKind, id: string, input: { name?: unkno
 }
 
 /** Delete a tag; optionally move its posts onto another tag of the same kind first. */
+/**
+ * Move a tag to the other taxonomy (category ⇄ Shadow Data Type), carrying every post's tag
+ * with it. If the other side already has a tag with the same name, the two merge.
+ */
+export function moveTerm(from: TaxonomyKind, id: string): IntelCategory {
+  return mutate((s) => moveOne(s, from, id));
+}
+
+/** Move every tag of one taxonomy across (used to fix tags filed under the wrong one). */
+export function moveAllTerms(from: TaxonomyKind): { moved: number } {
+  return mutate((s) => {
+    const ids = s[from].map((c) => c.id);
+    for (const id of ids) moveOne(s, from, id);
+    return { moved: ids.length };
+  });
+}
+
+function moveOne(s: Store, from: TaxonomyKind, id: string): IntelCategory {
+  const to: TaxonomyKind = from === "categories" ? "dataTypes" : "categories";
+  const src = s[from].find((c) => c.id === id);
+  if (!src) throw new IntelError(`That ${LABEL[from]} was not found.`, 404);
+  let dst = s[to].find((c) => c.name.toLowerCase() === src.name.toLowerCase());
+  if (!dst) {
+    dst = { ...src }; // keep id, name and colour so nothing visible changes but the bucket
+    s[to].push(dst);
+  }
+  const fromField = POST_FIELD[from];
+  const toField = POST_FIELD[to];
+  for (const p of s.posts) {
+    if (!p[fromField].includes(id)) continue;
+    p[fromField] = p[fromField].filter((x) => x !== id);
+    if (!p[toField].includes(dst.id)) p[toField].push(dst.id);
+  }
+  s[from] = s[from].filter((c) => c.id !== id);
+  return dst;
+}
+
 export function deleteTerm(kind: TaxonomyKind, id: string, mergeInto?: string | null): void {
   mutate((s) => {
     const field = POST_FIELD[kind];

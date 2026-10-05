@@ -51,6 +51,9 @@ export async function POST(req: NextRequest) {
         : [];
   if (list.length === 0) return NextResponse.json({ error: "No posts in request body." }, { status: 400 });
   if (list.length > 50) return NextResponse.json({ error: "Max 50 posts per request." }, { status: 400 });
-  const inputs = list.filter((x): x is PostInput => !!x && typeof x === "object");
+  const inputs = list
+    .filter((x): x is PostInput => !!x && typeof x === "object")
+    // Categories are reserved for admins; GrokBot tags the data source via `dataTypes` instead.
+    .map((x) => (gate.actor.kind === "bot" ? { ...x, categories: undefined } : x));
   return handle(() => createPosts(inputs, actorName(gate.actor)), 201);
 }

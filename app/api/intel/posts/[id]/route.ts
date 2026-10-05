@@ -25,6 +25,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   if ("response" in gate) return gate.response;
   const { id } = await params;
   const body = await jsonBody(req);
+  if (gate.actor.kind === "bot") delete body.categories; // categories are admin-only
   return handle(() => ({ post: updatePost(id, body) }));
 }
 

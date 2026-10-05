@@ -181,8 +181,8 @@ function PostsTab({ meta, run, onError }: { meta: Meta; run: Run; onError: (e: s
 }
 
 const TERM = {
-  categories: { api: "/api/intel/categories", one: "category", placeholder: "Category name", empty: "No categories yet. GrokBot creates them as it posts, or add one above." },
-  dataTypes: { api: "/api/intel/data-types", one: "data type", placeholder: "Shadow Data Type name", empty: "No Shadow Data Types yet. GrokBot creates them as it posts, or add one above." },
+  categories: { api: "/api/intel/categories", one: "category", other: "Shadow Data Types", placeholder: "Category name", empty: "No categories yet. Categories are admin-only — GrokBot doesn't use them." },
+  dataTypes: { api: "/api/intel/data-types", one: "data type", other: "Categories", placeholder: "Shadow Data Type name", empty: "No Shadow Data Types yet. GrokBot creates them as it posts, or add one above." },
 } as const;
 
 type Kind = keyof typeof TERM;
@@ -193,9 +193,25 @@ function CategoriesTab({ kind, terms, run }: { kind: Kind; terms: Category[]; ru
   const [color, setColor] = useState("#6366f1");
   return (
     <section className="max-w-2xl">
+      {kind === "categories" && (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <p className="flex-1 text-xs text-muted">Categories are reserved for admins. GrokBot tags the data source with Shadow Data Types instead.</p>
+          {terms.length > 0 && (
+            <button
+              className={btn}
+              onClick={() =>
+                confirm(`Move all ${terms.length} categories (and their post tags) to Shadow Data Types?`) &&
+                run(() => api(`${t.api}/move-all`, { method: "POST" }))
+              }
+            >
+              Move all → Shadow Data Types
+            </button>
+          )}
+        </div>
+      )}
       {kind === "dataTypes" && (
         <p className="mb-3 text-xs text-muted">
-          The kind of alternative data a post is built on (hiring data, satellite imagery, patents, web traffic…). Admins and GrokBot can add new ones; only admins can rename, merge or delete.
+          The kind of alternative data a post is built on (hiring data, satellite imagery, patents, web traffic…). Admins and GrokBot can add new ones; only admins can rename, merge, move or delete.
         </p>
       )}
       <div className="mb-4 flex gap-2">
@@ -241,6 +257,13 @@ function CategoryRow({ kind, cat, others, run }: { kind: Kind; cat: Category; ot
           Save
         </button>
       )}
+      <button
+        className={btn}
+        title={`Move this tag, and every post's tag, to ${t.other}`}
+        onClick={() => run(() => api(`${t.api}/${cat.id}/move`, { method: "POST" }))}
+      >
+        → {t.other}
+      </button>
       <select className={`${input} text-xs`} value={mergeInto} onChange={(e) => setMergeInto(e.target.value)}>
         <option value="">Delete (untag posts)</option>
         {others.map((o) => (

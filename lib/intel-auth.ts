@@ -1,8 +1,9 @@
 /**
  * Access rules for the Intelligence Feed:
  *  - GrokBot authenticates with `Authorization: Bearer <INTEL_FEED_API_KEY>`. The key can
- *    read the feed, create/edit posts, and ADD categories, Shadow Data Types, tickers and
- *    portfolios — never rename/merge/delete them, delete posts, or touch folders. It is a
+ *    read the feed, create/edit posts, and ADD Shadow Data Types, tickers and portfolios —
+ *    never rename/merge/delete them, delete posts, touch folders, or set/create CATEGORIES
+ *    (reserved for admins; bot-sent `categories` are dropped in the posts routes). It is a
  *    dedicated key so the bot never holds HUB_API_TOKEN (an admin identity across the app).
  *  - Hub admins (super_admin / exec_admin / admin) curate everything.
  *  - Any signed-in hub user reads the feed and keeps their own saved folders.

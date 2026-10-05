@@ -58,7 +58,7 @@ Store: `lib/intel.ts` → `DATA_DIR/intel.json` (posts, categories, tickers,
 portfolios, per-user saved folders; atomic tmp+rename writes). Access rules in
 `lib/intel-auth.ts`: GrokBot uses `Authorization: Bearer INTEL_FEED_API_KEY`
 (read, create/edit posts, and ADD categories / Shadow Data Types / tickers /
-portfolios; never rename/merge/delete or delete posts — deliberately NOT `HUB_API_TOKEN`); hub admins
+portfolios; never set/create categories (admin-reserved, dropped if sent), rename/merge/delete, or delete posts — deliberately NOT `HUB_API_TOKEN`); hub admins
 (super_admin/exec_admin/admin) curate at `/intel/admin`; every hub user reads the
 feed and keeps their own folders at `/intel/saved`. Posts carry two tag taxonomies: categories (topic) and Shadow Data Types
 (`dataTypes` — the alt-data source the post is built on). A "portfolio" is a
