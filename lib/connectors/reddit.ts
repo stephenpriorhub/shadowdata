@@ -89,7 +89,7 @@ export const redditConnector: Connector = {
         tookMs: Date.now() - start,
       });
     } catch (e) {
-      const f = classifyFailure(e);
+      const f = classifyFailure(e, meta.label);
       return result(meta, {
         ...f,
         error: f.status === "error" ? "Reddit rate-limits server requests; retry later." : undefined,

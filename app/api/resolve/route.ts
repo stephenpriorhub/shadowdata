@@ -1,3 +1,4 @@
+import { redact } from "@/lib/connectors/http";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireHubUser } from "@/lib/hub-auth";
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ entity });
   } catch (e) {
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Resolution failed" },
+      { error: e instanceof Error ? redact(e.message) : "Resolution failed" },
       { status: 404 }
     );
   }

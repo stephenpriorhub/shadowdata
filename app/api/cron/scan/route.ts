@@ -1,3 +1,4 @@
+import { redact } from "@/lib/connectors/http";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { getAllWatchedTickers } from "@/lib/watchlist";
@@ -37,7 +38,7 @@ async function run(req: NextRequest) {
       appendSnapshot(t, signals);
       results.push({ ticker: t, ok: signals.filter((s) => s.status === "ok").length, total: signals.length });
     } catch (e) {
-      results.push({ ticker: t, ok: 0, total: 0, error: e instanceof Error ? e.message : String(e) });
+      results.push({ ticker: t, ok: 0, total: 0, error: e instanceof Error ? redact(e.message) : redact(String(e)) });
     }
   }
   return NextResponse.json({ scanned: tickers.length, at: new Date().toISOString(), results });

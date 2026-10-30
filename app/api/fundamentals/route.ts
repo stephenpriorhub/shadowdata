@@ -1,3 +1,4 @@
+import { redact } from "@/lib/connectors/http";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireHubUser } from "@/lib/hub-auth";
@@ -16,6 +17,6 @@ export async function GET(req: NextRequest) {
     const fundamentals = await getFundamentals(ticker);
     return NextResponse.json({ fundamentals });
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : "failed" }, { status: 500 });
+    return NextResponse.json({ error: e instanceof Error ? redact(e.message) : "failed" }, { status: 500 });
   }
 }

@@ -1,3 +1,4 @@
+import { redact } from "@/lib/connectors/http";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireHubUser } from "@/lib/hub-auth";
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ synthesis });
   } catch (e) {
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Synthesis failed" },
+      { error: e instanceof Error ? redact(e.message) : "Synthesis failed" },
       { status: 500 }
     );
   }
