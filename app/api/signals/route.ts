@@ -1,3 +1,4 @@
+import { redact } from "@/lib/connectors/http";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireHubUser } from "@/lib/hub-auth";
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest) {
         }
         send("done", { count: collected.length });
       } catch (e) {
-        send("error", { message: e instanceof Error ? e.message : "Signal fetch failed" });
+        send("error", { message: e instanceof Error ? redact(e.message) : "Signal fetch failed" });
       } finally {
         controller.close();
       }

@@ -12,6 +12,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getCached, setCached } from "../store";
 import { geocodePlace } from "../geocode";
+import { classifyFailure } from "./http";
 import { SYNTH_MODEL } from "../models";
 import { findScene, lonLatToTile, fetchTileBase64 } from "../planet";
 import { result, type Connector, type DetailSection, type ImageryFrame, type ImageryRead } from "./types";
@@ -345,7 +346,7 @@ export const satelliteConnector: Connector = {
       return result(meta, {
         status: aborted ? "no-data" : "error",
         note: aborted ? "Idea generation timed out — re-scan to retry (results cache once generated)." : undefined,
-        error: aborted ? undefined : msg,
+        error: aborted ? undefined : classifyFailure(e, meta.label).error,
         tookMs: Date.now() - start,
       });
     }

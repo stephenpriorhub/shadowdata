@@ -94,7 +94,7 @@ export const webConnector: Connector = {
         tookMs: Date.now() - start,
       });
     } catch (e) {
-      const f = classifyFailure(e);
+      const f = classifyFailure(e, meta.label);
       return result(meta, {
         ...f,
         note: f.status === "no-data" ? `No Wikipedia article found for "${title}".` : f.note,

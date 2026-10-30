@@ -169,7 +169,7 @@ export const githubConnector: Connector = {
         tookMs: Date.now() - start,
       });
     } catch (e) {
-      const f = classifyFailure(e);
+      const f = classifyFailure(e, meta.label);
       return result(meta, {
         ...f,
         note: f.status === "no-data" ? `GitHub org "${org}" not found or has no public repos.` : f.note,

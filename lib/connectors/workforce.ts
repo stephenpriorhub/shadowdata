@@ -129,7 +129,7 @@ export const workforceConnector: Connector = {
         tookMs: Date.now() - start,
       });
     } catch (e) {
-      return result(meta, { ...classifyFailure(e), tookMs: Date.now() - start });
+      return result(meta, { ...classifyFailure(e, meta.label), tookMs: Date.now() - start });
     }
   },
 };

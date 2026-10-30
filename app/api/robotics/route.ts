@@ -1,3 +1,4 @@
+import { redact } from "@/lib/connectors/http";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireHubUser } from "@/lib/hub-auth";
@@ -122,7 +123,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (e) {
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Failed to load robotics watchlist" },
+      { error: e instanceof Error ? redact(e.message) : "Failed to load robotics watchlist" },
       { status: 502 }
     );
   }

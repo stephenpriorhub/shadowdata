@@ -274,7 +274,7 @@ export const importYetiConnector: Connector = {
         tookMs: Date.now() - start,
       });
     } catch (e) {
-      const f = classifyFailure(e);
+      const f = classifyFailure(e, meta.label);
       return result(meta, {
         ...f,
         note: f.status === "no-data" ? `No ImportYeti profile matched "${term}". Link-out still available.` : f.note,

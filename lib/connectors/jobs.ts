@@ -121,11 +121,11 @@ export const jobsConnector: Connector = {
       try {
         roles.push(...(await fn));
       } catch (e) {
-        if (!(e instanceof HttpError && (e.status === 404 || e.status === 403))) softErrors.push(`${name}: ${e instanceof Error ? e.message : e}`);
+        if (!(e instanceof HttpError && (e.status === 404 || e.status === 403))) softErrors.push(classifyFailure(e, name).error ?? `${name}: (unavailable)`);
       }
     };
-    if (greenhouseSlug) await tryBoard(greenhouse(greenhouseSlug, ctx.signal), "greenhouse");
-    if (leverSlug) await tryBoard(lever(leverSlug, ctx.signal), "lever");
+    if (greenhouseSlug) await tryBoard(greenhouse(greenhouseSlug, ctx.signal), "Greenhouse");
+    if (leverSlug) await tryBoard(lever(leverSlug, ctx.signal), "Lever");
     if (roles.length) source = "ats";
 
     // ── 2. Google Jobs fallback (universal coverage) ──
@@ -141,7 +141,7 @@ export const jobsConnector: Connector = {
             sampled = true;
           }
         } catch (e) {
-          softErrors.push(`google-jobs: ${e instanceof Error ? e.message : e}`);
+          softErrors.push(classifyFailure(e, "Google Jobs (SearchApi)").error ?? "Google Jobs (SearchApi): (unavailable)");
         }
       }
     }

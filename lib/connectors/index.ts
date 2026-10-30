@@ -7,6 +7,7 @@
  */
 import type { Connector, ResolvedEntity, SignalResult } from "./types";
 import { result } from "./types";
+import { classifyFailure, redact } from "./http";
 
 import { githubConnector } from "./github";
 import { filingsConnector } from "./filings";
@@ -66,11 +67,15 @@ async function runOne(c: Connector, entity: ResolvedEntity): Promise<SignalResul
   const timer = setTimeout(() => controller.abort(), c.timeoutMs ?? CONNECTOR_TIMEOUT_MS);
   const start = Date.now();
   try {
-    return await c.fetch(entity, { signal: controller.signal, now: new Date() });
+    const r = await c.fetch(entity, { signal: controller.signal, now: new Date() });
+    // Defense in depth: no connector may hand keys/query strings to the client.
+    if (r.error) r.error = redact(r.error);
+    if (r.note) r.note = redact(r.note);
+    return r;
   } catch (e) {
     return result(c, {
       status: "error",
-      error: e instanceof Error ? e.message : String(e),
+      error: classifyFailure(e, c.label).error ?? `${c.label}: (internal)`,
       tookMs: Date.now() - start,
     });
   } finally {
