@@ -411,7 +411,7 @@ function ThesisCardView({ card }: { card: ThesisCard }) {
   );
 }
 
-function ThesisPanel({ synthesis, loading }: { synthesis: Synthesis | null; loading: boolean }) {
+function ThesisPanel({ synthesis, loading, generatedAt }: { synthesis: Synthesis | null; loading: boolean; generatedAt: string | null }) {
   if (loading) return <div className="rounded-xl border border-border bg-surface p-5 text-sm text-muted">Synthesizing an investment thesis from the signals…</div>;
   if (!synthesis) return null;
   const arr = <T,>(v: T[] | undefined): T[] => (Array.isArray(v) ? v : []);
@@ -424,6 +424,11 @@ function ThesisPanel({ synthesis, loading }: { synthesis: Synthesis | null; load
   return (
     <div className="rounded-xl border border-border bg-surface p-5">
       <h2 className="text-lg font-semibold">Investment Thesis</h2>
+      {generatedAt && (
+        <p className="mt-0.5 text-[11px] text-muted">
+          Generated {new Date(generatedAt).toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" })} ET · refreshes daily
+        </p>
+      )}
       <p className="mt-2 text-sm text-foreground/90">{synthesis.summary}</p>
       {(synthesis.strongestSupport || synthesis.strongestContradiction) && (
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -593,6 +598,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [synthesis, setSynthesis] = useState<Synthesis | null>(null);
   const [synthLoading, setSynthLoading] = useState(false);
+  const [synthAt, setSynthAt] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [fundamentals, setFundamentals] = useState<Fundamentals | null>(null);
   const [watchTickers, setWatchTickers] = useState<string[]>([]);
@@ -620,12 +626,16 @@ export default function Home() {
       .catch(() => {});
   }, []);
 
-  const runSynthesis = useCallback(async (tk: string, sigs: SignalResult[]) => {
+  // The server builds the thesis from its own snapshot and caches it per ticker per day.
+  const runSynthesis = useCallback(async (tk: string) => {
     setSynthLoading(true);
     try {
-      const res = await fetch("/api/synthesize", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ticker: tk, signals: sigs }) });
+      const res = await fetch("/api/synthesize", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ticker: tk }) });
       const json = await res.json();
-      if (res.ok) setSynthesis(json.synthesis);
+      if (res.ok) {
+        setSynthesis(json.synthesis);
+        setSynthAt(json.generatedAt ?? null);
+      }
     } catch {
       /* best-effort */
     } finally {
@@ -645,6 +655,7 @@ export default function Home() {
     setPending([]);
     setLocked([]);
     setSynthesis(null);
+    setSynthAt(null);
     setSelectedId(null);
 
     const collected: SignalResult[] = [];
@@ -685,7 +696,7 @@ export default function Home() {
           }
         }
       }
-      if (id === runId.current && collected.some((s) => s.status === "ok")) void runSynthesis(tk, collected);
+      if (id === runId.current && collected.some((s) => s.status === "ok")) void runSynthesis(tk);
     } catch (e) {
       if (id === runId.current) setError(e instanceof Error ? e.message : "Search failed");
     } finally {
@@ -798,7 +809,7 @@ export default function Home() {
           ) : (
             <>
               <FundamentalsCard f={fundamentals} />
-              {(synthLoading || synthesis) && <ThesisPanel synthesis={synthesis} loading={synthLoading} />}
+              {(synthLoading || synthesis) && <ThesisPanel synthesis={synthesis} loading={synthLoading} generatedAt={synthAt} />}
 
               {(orderedSignals.length > 0 || pendingWaiting.length > 0) && (
                 <section>
