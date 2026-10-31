@@ -5,6 +5,7 @@ import { getAllWatchedTickers } from "@/lib/watchlist";
 import { resolveEntity } from "@/lib/entity-resolver";
 import { runConnectors } from "@/lib/connectors";
 import { appendSnapshot } from "@/lib/store";
+import { secretMatchesAny } from "@/lib/secrets";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,23 +13,31 @@ export const maxDuration = 300;
 
 /**
  * Scheduled scan of every watchlisted ticker → appends a fresh snapshot each, so hiring/
- * headcount/trend histories accrue automatically over time. Auth: x-hub-token == HUB_API_TOKEN
- * (or CRON_SECRET). Runs sequentially with a small delay to be gentle on metered APIs.
+ * headcount/trend histories accrue automatically over time. Fired daily by instrumentation.ts.
+ * Auth: `x-hub-token` header must equal HUB_API_TOKEN or CRON_SECRET (constant-time). The token
+ * is never accepted in the URL (URLs land in proxy/access logs). POST only, so a pasted or
+ * prefetched link can't trigger a scan. One scan at a time: a second call while one is running
+ * gets 409 instead of doubling the metered API spend. Runs sequentially to be gentle on APIs.
  */
-export async function POST(req: NextRequest) {
-  return run(req);
-}
-export async function GET(req: NextRequest) {
-  return run(req);
-}
+let running = false;
 
-async function run(req: NextRequest) {
-  const token = req.headers.get("x-hub-token") || req.nextUrl.searchParams.get("token");
-  const expected = process.env.HUB_API_TOKEN || process.env.CRON_SECRET;
-  if (!expected || token !== expected) {
+export async function POST(req: NextRequest) {
+  const token = req.headers.get("x-hub-token");
+  if (!secretMatchesAny(token, [process.env.HUB_API_TOKEN, process.env.CRON_SECRET])) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (running) {
+    return NextResponse.json({ error: "A scan is already running" }, { status: 409 });
+  }
+  running = true;
+  try {
+    return await scan();
+  } finally {
+    running = false;
+  }
+}
 
+async function scan() {
   const tickers = getAllWatchedTickers();
   const results: { ticker: string; ok: number; total: number; error?: string }[] = [];
   for (const t of tickers) {
