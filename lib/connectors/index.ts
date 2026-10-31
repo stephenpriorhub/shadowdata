@@ -16,13 +16,11 @@ import { redditConnector } from "./reddit";
 import { patentsConnector } from "./patents";
 import { jobsConnector } from "./jobs";
 import { webConnector } from "./web";
-import { trendsConnector } from "./trends";
 import { appsConnector } from "./apps";
 import { importYetiConnector } from "./importyeti";
 import { workforceConnector } from "./workforce";
 import { optionsFlowConnector } from "./unusualwhales";
 import { finraShortConnector } from "./finra";
-import { satelliteConnector } from "./satellite";
 import { realEstateConnector } from "./realestate";
 import { roboticsConnector } from "./robotics";
 import { stubConnectors } from "./stubs";
@@ -34,7 +32,6 @@ export const CONNECTORS: Connector[] = [
   workforceConnector,
   optionsFlowConnector,
   finraShortConnector,
-  trendsConnector,
   webConnector,
   appsConnector,
   importYetiConnector,
@@ -42,7 +39,6 @@ export const CONNECTORS: Connector[] = [
   redditConnector,
   patentsConnector,
   realEstateConnector,
-  satelliteConnector,
   roboticsConnector,
   ...stubConnectors,
 ];
