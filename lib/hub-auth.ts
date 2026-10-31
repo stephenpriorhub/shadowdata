@@ -13,6 +13,7 @@
 
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { secretMatches } from "./secrets";
 
 const HUB_PROJECT_ID = process.env.NEXT_PUBLIC_HUB_PROJECT_ID || "shadowdata";
 const HUB_ME_URL =
@@ -29,9 +30,7 @@ export interface HubUser {
 
 /** Scripted/cron bypass: `x-hub-token: HUB_API_TOKEN` acts as an admin service identity. */
 function serviceUser(req: NextRequest): HubUser | null {
-  const token = req.headers.get("x-hub-token");
-  const expected = process.env.HUB_API_TOKEN;
-  if (!token || !expected || token !== expected) return null;
+  if (!secretMatches(req.headers.get("x-hub-token"), process.env.HUB_API_TOKEN)) return null;
   return { id: "service", email: "service@oxfordhub.app", name: "Service", role: "admin" };
 }
 

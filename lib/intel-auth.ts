@@ -8,11 +8,11 @@
  *  - Hub admins (super_admin / exec_admin / admin) curate everything.
  *  - Any signed-in hub user reads the feed and keeps their own saved folders.
  */
-import crypto from "crypto";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireHubUser, type HubUser } from "./hub-auth";
 import { IntelError } from "./intel";
+import { secretMatches } from "./secrets";
 
 export type IntelActor = { kind: "bot"; name: string } | { kind: "user"; user: HubUser };
 
@@ -21,12 +21,9 @@ export function isIntelAdmin(role: string): boolean {
 }
 
 function isBot(req: NextRequest): boolean {
-  const expected = process.env.INTEL_FEED_API_KEY;
   const header = req.headers.get("authorization") ?? "";
-  if (!expected || !header.startsWith("Bearer ")) return false;
-  const a = Buffer.from(header.slice(7).trim());
-  const b = Buffer.from(expected);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  if (!header.startsWith("Bearer ")) return false;
+  return secretMatches(header.slice(7).trim(), process.env.INTEL_FEED_API_KEY);
 }
 
 type Gate<T> = { actor: T } | { response: NextResponse };
