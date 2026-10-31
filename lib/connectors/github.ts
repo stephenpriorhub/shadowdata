@@ -80,6 +80,7 @@ async function commitActivity(fullName: string, signal: AbortSignal): Promise<Ti
 
 export const githubConnector: Connector = {
   ...meta,
+  source: { label: "GitHub", url: "https://github.com" },
   enabled: true,
   description: "Commit velocity, release cadence, stars and contributor momentum across the company's public repos.",
   requiredIdentifiers: ["githubOrg"],

@@ -128,6 +128,7 @@ async function resolveProfile(
 
 export const importYetiConnector: Connector = {
   ...meta,
+  source: { label: "ImportYeti (US customs bills of lading)", url: "https://www.importyeti.com" },
   enabled: true,
   description: "U.S. import bill-of-lading volume, trend, top suppliers, product mix and trade lanes from ImportYeti.",
   requiredIdentifiers: [],

@@ -26,6 +26,7 @@ const DAY = 1000 * 60 * 60 * 24;
 
 export const hackernewsConnector: Connector = {
   ...meta,
+  source: { label: "Hacker News (Algolia search)", url: "https://hn.algolia.com" },
   enabled: true,
   description: "Story volume, points and comment activity mentioning the company on Hacker News.",
   requiredIdentifiers: ["brandTerms"],

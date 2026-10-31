@@ -40,6 +40,7 @@ function quote(s: string): string {
 
 export const patentsConnector: Connector = {
   ...meta,
+  source: { label: "USPTO Open Data Portal", url: "https://data.uspto.gov" },
   enabled: true,
   description: "Granted-patent volume and topics by assignee (USPTO Open Data Portal / File Wrapper Search).",
   requiredIdentifiers: ["patentAssignees"],

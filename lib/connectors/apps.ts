@@ -36,6 +36,7 @@ interface RssEntry {
 
 export const appsConnector: Connector = {
   ...meta,
+  source: { label: "Apple App Store", url: "https://apps.apple.com" },
   enabled: true,
   description: "App Store rating count (install proxy), rating trend and recent-review sentiment.",
   requiredIdentifiers: ["iosAppIds"],

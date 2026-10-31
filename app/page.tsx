@@ -64,11 +64,41 @@ function StatusPill({ status }: { status: SignalResult["status"] }) {
   const map: Record<SignalResult["status"], [string, string]> = {
     ok: ["live", "bg-bull/15 text-bull"],
     "no-data": ["no data", "bg-neutral/15 text-neutral"],
-    "not-applicable": ["n/a", "bg-muted/15 text-muted"],
-    error: ["error", "bg-bear/15 text-bear"],
+    "not-applicable": ["not applicable", "bg-muted/15 text-muted"],
+    error: ["failed", "bg-bear/15 text-bear"],
   };
   const [label, cls] = map[status] ?? ["", "bg-surface-2 text-muted"];
   return <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${cls}`}>{label}</span>;
+}
+
+/** Plain-English line for a panel that has no live data. */
+function statusMessage(signal: SignalResult): string {
+  if (signal.status === "error") return signal.error ?? "The source failed to respond.";
+  if (signal.status === "no-data") return signal.note ?? "The source answered, but has no data for this company.";
+  if (signal.status === "not-applicable") return signal.note ?? "This source doesn't cover this company.";
+  return "";
+}
+
+/** "As of <date> · Source ↗" — shown on every panel, whatever its status. Date-only values are data dates. */
+function AsOfSource({ signal }: { signal: SignalResult }) {
+  const asOf = signal.asOf ?? signal.fetchedAt;
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(asOf);
+  const when = dateOnly
+    ? new Date(`${asOf}T12:00:00Z`).toLocaleDateString("en-US", { dateStyle: "medium", timeZone: "UTC" })
+    : new Date(asOf).toLocaleString("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" }) + " ET";
+  return (
+    <span className="text-[10px] text-muted">
+      {signal.status === "ok" ? "As of" : "Checked"} {when}
+      {signal.source && (
+        <>
+          {" · "}
+          <a href={signal.source.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="hover:text-accent hover:underline">
+            {signal.source.label} ↗
+          </a>
+        </>
+      )}
+    </span>
+  );
 }
 
 function LinkButton({ link }: { link?: { label: string; url: string } }) {
@@ -199,7 +229,18 @@ function SectionRenderer({ section }: { section: DetailSection }) {
 function StatTile({ signal, onOpen }: { signal: SignalResult; onOpen: () => void }) {
   const primary = signal.metrics?.[0];
   return (
-    <button onClick={onOpen} className="flex flex-col rounded-xl border border-border bg-surface p-4 text-left transition hover:border-accent/60">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      className="flex cursor-pointer flex-col rounded-xl border border-border bg-surface p-4 text-left transition hover:border-accent/60"
+    >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-base">{CATEGORY_ICON[signal.category] ?? "•"}</span>
@@ -221,10 +262,13 @@ function StatTile({ signal, onOpen }: { signal: SignalResult; onOpen: () => void
           {signal.headline && <p className="mt-1 line-clamp-2 text-xs text-muted">{signal.headline}</p>}
         </>
       ) : (
-        <p className="mt-2 text-xs text-muted">{signal.note ?? signal.error ?? "—"}</p>
+        <p className={`mt-2 text-xs ${signal.status === "error" ? "text-bear" : "text-muted"}`}>{statusMessage(signal)}</p>
       )}
-      <span className="mt-2 text-[11px] text-accent">Open details →</span>
-    </button>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+        <AsOfSource signal={signal} />
+        <span className="text-[11px] text-accent">Open details →</span>
+      </div>
+    </div>
   );
 }
 
@@ -259,9 +303,12 @@ function SourceDetailPage({
           </div>
           <StatusPill status={signal.status} />
         </div>
+        <div className="mt-1"><AsOfSource signal={signal} /></div>
         {signal.headline && <p className="mt-2 text-sm text-foreground/90">{signal.headline}</p>}
-        {signal.note && signal.status !== "ok" && <p className="mt-2 text-xs text-muted">{signal.note}</p>}
-        {signal.error && <p className="mt-2 text-xs text-bear">{signal.error}</p>}
+        {signal.status === "ok" && signal.note && <p className="mt-2 text-xs text-muted">{signal.note}</p>}
+        {signal.status !== "ok" && (
+          <p className={`mt-2 text-xs ${signal.status === "error" ? "text-bear" : "text-muted"}`}>{statusMessage(signal)}</p>
+        )}
         {signal.primaryLink && <div className="mt-3"><LinkButton link={signal.primaryLink} /></div>}
 
         {signal.metrics.length > 0 && (

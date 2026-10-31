@@ -33,6 +33,7 @@ function cpOf(chain?: string): "C" | "P" | null {
 
 export const optionsFlowConnector: Connector = {
   ...meta,
+  source: { label: "Unusual Whales", url: "https://unusualwhales.com" },
   enabled: true,
   description: "Unusual options premium and call/put lean — how institutional flow is positioning.",
   requiredIdentifiers: [],

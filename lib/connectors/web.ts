@@ -23,6 +23,7 @@ function yyyymmdd(d: Date): string {
 
 export const webConnector: Connector = {
   ...meta,
+  source: { label: "Wikipedia pageviews", url: "https://pageviews.wmcloud.org" },
   enabled: true,
   description: "Public-attention trend from daily Wikipedia pageviews for the company's article.",
   requiredIdentifiers: ["wikipediaTitle"],

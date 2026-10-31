@@ -32,6 +32,7 @@ const DAY = 1000 * 60 * 60 * 24;
 
 export const redditConnector: Connector = {
   ...meta,
+  source: { label: "Reddit", url: "https://www.reddit.com" },
   enabled: true,
   description: "Post volume, score and comment activity mentioning the company across Reddit.",
   requiredIdentifiers: ["brandTerms"],

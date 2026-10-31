@@ -103,6 +103,7 @@ function hiringTrend(ticker: string, currentCount: number, now: Date): { ts?: Ti
 
 export const jobsConnector: Connector = {
   ...meta,
+  source: { label: "Greenhouse, Lever and Google Jobs", url: "https://www.greenhouse.com/job-board" },
   enabled: true,
   description: "Open-role volume, department mix and hiring trend (Greenhouse/Lever full counts, or Google Jobs sample).",
   requiredIdentifiers: [],

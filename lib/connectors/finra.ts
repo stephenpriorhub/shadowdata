@@ -90,6 +90,7 @@ export function candidateDays(now: Date): string[] {
 
 export const finraShortConnector: Connector = {
   ...meta,
+  source: { label: "FINRA Reg SHO daily files", url: "https://www.finra.org/finra-data/browse-catalog/short-sale-volume-data/daily-short-sale-volume-files" },
   enabled: true,
   description: "Daily share of off-exchange volume executed short (FINRA Reg SHO files). Not short interest.",
   requiredIdentifiers: [],
@@ -137,6 +138,7 @@ export const finraShortConnector: Connector = {
 
       return result(meta, {
         status: "ok",
+        asOf,
         headline:
           diffPts === undefined
             ? `${latestPct.toFixed(1)}% of off-exchange volume was short on ${asOf}.`
