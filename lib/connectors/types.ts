@@ -16,6 +16,7 @@ export type SignalCategory =
   | "supply"
   | "geo"
   | "options"
+  | "short-volume"
   | "realestate"
   | "robotics";
 

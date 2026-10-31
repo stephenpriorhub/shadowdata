@@ -21,6 +21,7 @@ import { appsConnector } from "./apps";
 import { importYetiConnector } from "./importyeti";
 import { workforceConnector } from "./workforce";
 import { optionsFlowConnector } from "./unusualwhales";
+import { finraShortConnector } from "./finra";
 import { satelliteConnector } from "./satellite";
 import { realEstateConnector } from "./realestate";
 import { roboticsConnector } from "./robotics";
@@ -32,6 +33,7 @@ export const CONNECTORS: Connector[] = [
   jobsConnector,
   workforceConnector,
   optionsFlowConnector,
+  finraShortConnector,
   trendsConnector,
   webConnector,
   appsConnector,

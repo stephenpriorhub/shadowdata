@@ -26,6 +26,7 @@ const CATEGORY_ICON: Record<string, string> = {
   supply: "🚢",
   geo: "🛰️",
   options: "🐋",
+  "short-volume": "📉",
   realestate: "🏢",
   robotics: "🤖",
 };
