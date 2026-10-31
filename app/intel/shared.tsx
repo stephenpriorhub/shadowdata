@@ -235,6 +235,16 @@ export function PostCard({
               Analyze {post.tickers[0]}
             </Link>
           )}
+          {post.tickers.length > 1 && (
+            <span className="flex items-center gap-1 px-1 text-xs text-muted">
+              Analyze
+              {post.tickers.map((t) => (
+                <Link key={t} href={`/?ticker=${t}`} className="rounded px-1 hover:text-foreground">
+                  {t}
+                </Link>
+              ))}
+            </span>
+          )}
           {extraAction}
           <ShareButton postId={post.id} />
           {onEdit && (
