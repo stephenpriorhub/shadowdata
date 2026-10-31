@@ -440,6 +440,67 @@ function ThesisPanel({ synthesis, loading, generatedAt }: { synthesis: Synthesis
   );
 }
 
+interface FeedPost {
+  id: string;
+  title: string;
+  summary: string;
+  bigIdea: string;
+  sourceName: string | null;
+  tickers: string[];
+  publishedAt: string;
+}
+
+/** The ticker's Shadow Feed (Intelligence Feed) posts, newest first, with a link to the full filtered feed. */
+function ShadowFeedPanel({ ticker }: { ticker: string }) {
+  const [state, setState] = useState<{ posts: FeedPost[]; total: number } | "loading" | "failed">("loading");
+  useEffect(() => {
+    let alive = true;
+    fetch(`/api/intel/posts?ticker=${encodeURIComponent(ticker)}&limit=5`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d: { posts: FeedPost[]; total: number }) => alive && setState({ posts: d.posts ?? [], total: d.total ?? 0 }))
+      .catch(() => alive && setState("failed"));
+    return () => {
+      alive = false;
+    };
+  }, [ticker]);
+
+  const feedHref = `/intel?ticker=${encodeURIComponent(ticker)}`;
+  return (
+    <section className="rounded-xl border border-border bg-surface p-5">
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 className="text-lg font-semibold">Shadow Feed · ${ticker}</h2>
+        {typeof state === "object" && state.total > 0 && (
+          <a href={feedHref} className="text-xs font-medium text-accent hover:underline">
+            See all {state.total} post{state.total === 1 ? "" : "s"} →
+          </a>
+        )}
+      </div>
+      {state === "loading" && <div className="mt-3 h-2 w-1/3 animate-pulse rounded bg-surface-2" />}
+      {state === "failed" && <p className="mt-2 text-xs text-bear">Couldn&apos;t load the Shadow Feed right now.</p>}
+      {typeof state === "object" && state.posts.length === 0 && (
+        <p className="mt-2 text-xs text-muted">
+          No Shadow Feed posts mention ${ticker} yet. <a href="/intel" className="text-accent hover:underline">Browse the feed →</a>
+        </p>
+      )}
+      {typeof state === "object" && state.posts.length > 0 && (
+        <ul className="mt-3 divide-y divide-border">
+          {state.posts.map((p) => (
+            <li key={p.id} className="py-2.5">
+              <a href={`/intel/p/${p.id}`} className="text-sm font-medium hover:text-accent">{p.title}</a>
+              <p className="mt-0.5 line-clamp-2 text-xs text-foreground/75">{p.bigIdea || p.summary}</p>
+              <p className="mt-1 text-[11px] text-muted">
+                {new Date(p.publishedAt).toLocaleDateString("en-US", { dateStyle: "medium" })}
+                {p.sourceName ? ` · ${p.sourceName}` : ""}
+                {p.tickers.length > 1 ? ` · also ${p.tickers.filter((t) => t !== ticker).map((t) => `$${t}`).join(", ")}` : ""}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function CompanyHeader({ entity }: { entity: ResolvedEntity }) {
   return (
     <section className="rounded-xl border border-border bg-surface p-5">
@@ -788,6 +849,7 @@ export default function Home() {
             <>
               <FundamentalsCard f={fundamentals} />
               {(synthLoading || synthesis) && <ThesisPanel synthesis={synthesis} loading={synthLoading} generatedAt={synthAt} />}
+              <ShadowFeedPanel key={entity.ticker} ticker={entity.ticker} />
 
               {(orderedSignals.length > 0 || pendingWaiting.length > 0) && (
                 <section>
