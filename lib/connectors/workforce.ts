@@ -61,6 +61,7 @@ function headcountTrend(ticker: string, current: number, now: Date): { ts?: Time
 
 export const workforceConnector: Connector = {
   ...meta,
+  source: { label: "People Data Labs", url: "https://www.peopledatalabs.com" },
   enabled: true,
   description: "Total employee headcount, geographic distribution and headcount trend (People Data Labs).",
   requiredIdentifiers: [],

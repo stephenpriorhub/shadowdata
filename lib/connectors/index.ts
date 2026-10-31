@@ -8,6 +8,7 @@
 import type { Connector, ResolvedEntity, SignalResult } from "./types";
 import { result } from "./types";
 import { classifyFailure, redact } from "./http";
+import { recordOutcome } from "../source-health";
 
 import { githubConnector } from "./github";
 import { filingsConnector } from "./filings";
@@ -64,14 +65,14 @@ async function runOne(c: Connector, entity: ResolvedEntity): Promise<SignalResul
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), c.timeoutMs ?? CONNECTOR_TIMEOUT_MS);
   const start = Date.now();
+  let r: SignalResult;
   try {
-    const r = await c.fetch(entity, { signal: controller.signal, now: new Date() });
+    r = await c.fetch(entity, { signal: controller.signal, now: new Date() });
     // Defense in depth: no connector may hand keys/query strings to the client.
     if (r.error) r.error = redact(r.error);
     if (r.note) r.note = redact(r.note);
-    return r;
   } catch (e) {
-    return result(c, {
+    r = result(c, {
       status: "error",
       error: classifyFailure(e, c.label).error ?? `${c.label}: (internal)`,
       tookMs: Date.now() - start,
@@ -79,6 +80,12 @@ async function runOne(c: Connector, entity: ResolvedEntity): Promise<SignalResul
   } finally {
     clearTimeout(timer);
   }
+  // Every panel carries an as-of date and its source, whatever its status.
+  r.asOf ??= r.fetchedAt;
+  r.source ??= c.source;
+  if (r.status === "error" && !r.error) r.error = `${c.label}: failed`;
+  recordOutcome(entity.ticker, r);
+  return r;
 }
 
 /**

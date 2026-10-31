@@ -109,6 +109,7 @@ function extractProperties(html: string): string {
 
 export const realEstateConnector: Connector = {
   ...meta,
+  source: { label: "SEC EDGAR 10-K (Properties)", url: "https://www.sec.gov/edgar/search/" },
   enabled: true,
   description: "Owned/leased facilities, land and expansion signals from the company's SEC 10-K Properties section.",
   requiredIdentifiers: [],

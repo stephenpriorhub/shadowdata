@@ -30,6 +30,7 @@ const DAY = 1000 * 60 * 60 * 24;
 
 export const filingsConnector: Connector = {
   ...meta,
+  source: { label: "SEC EDGAR", url: "https://www.sec.gov/edgar/search/" },
   enabled: true,
   description: "Recent 8-K / 10-Q / 10-K cadence from SEC EDGAR — surfaces material-event catalysts.",
   requiredIdentifiers: [],

@@ -94,6 +94,10 @@ export interface SignalResult {
   detail?: DetailSection[];
   error?: string;
   fetchedAt: string;
+  /** Date the data itself refers to (e.g. the trading day or filing date). Defaults to fetchedAt. */
+  asOf?: string;
+  /** Upstream source; filled from the connector's `source` when the connector doesn't set it. */
+  source?: { label: string; url: string };
   tookMs?: number;
 }
 
@@ -128,6 +132,8 @@ export interface Connector {
   enabled: boolean;
   /** Short description shown on locked cards / tooltips. */
   description: string;
+  /** Where the data comes from — shown on every panel, whatever its status. */
+  source: { label: string; url: string };
   /** Identifiers that must be present for this connector to run. */
   requiredIdentifiers: (keyof EntityIdentifiers)[];
   /** Optional per-connector timeout override (ms). LLM-backed connectors need more than the default. */

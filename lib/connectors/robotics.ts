@@ -69,6 +69,7 @@ function relationshipTable(
 
 export const roboticsConnector: Connector = {
   ...meta,
+  source: { label: "Humanoids.FYI", url: "https://humanoids.fyi" },
   enabled: true,
   description:
     "Humanoid-robot supply-chain ties from the Humanoid Atlas (Humanoids.FYI): OEM/supplier role, component relationships, robot specs, funding & production.",
