@@ -29,8 +29,9 @@ brain writers in promo-analyzer).
 `identity` (SEC EDGAR + Polygon, in `lib/entity-resolver.ts`), `filings` (EDGAR),
 `github`, `hackernews`, `reddit`, `patents` (PatentsView, needs free key),
 `jobs` (Greenhouse + Lever), `web` (Wikipedia pageviews), `appstore` (iTunes).
-Locked stubs: SimilarWeb, Sensor Tower, Google Play, Google Trends, ImportYeti,
-Coresignal (premium) + Satellite, Mobile-location (roadmap).
+Also: `finra-short` (FINRA Reg SHO daily short volume), `options-flow` (Unusual
+Whales), `workforce`, `importyeti`, `realestate`, `robotics`.
+Removed 2026-10-31: Satellite (Planet) and Google Trends (SearchApi) panels.
 
 ## Entity resolution
 `lib/entity-resolver.ts`: SEC `company_tickers.json` → CIK + name (authoritative,
